@@ -430,7 +430,11 @@ with tabs[3]:
             st.success(f"**סכום סיכון דולרי:** ${risk_usd:.2f}")
             st.info(f"**גודל פוזיציה:** {pos_units:.4f} {calc_sym.replace('USDT','')}")
             st.warning(f"**רווח צפוי ב-TP2:** ${(risk_usd * d['rr']):.2f}")
-            # 1. Fibonacci Golden Zone (61.8% - 78.6%)
+            # 1. הגדרת שיא ושפל של הטווח (50 נרות אחרונים)
+range_high = df['high'].iloc[-50:].max()
+range_low = df['low'].iloc[-50:].min()
+
+# 2. חישוב אזור הזהב של פיבונאצ'י (61.8% - 78.6%)
 fib_range = range_high - range_low
 fib_618 = range_high - (fib_range * 0.618)
 fib_786 = range_high - (fib_range * 0.786)
@@ -438,26 +442,9 @@ fib_786 = range_high - (fib_range * 0.786)
 in_bullish_golden_zone = (close <= fib_618) and (close >= fib_786)
 in_bearish_golden_zone = (close >= (range_low + fib_range * 0.618)) and (close <= (range_low + fib_range * 0.786))
 
-# 2. Key Support & Resistance (Order Blocks)
+# 3. זיהוי רמות תמיכה והתנגדות (Order Blocks)
 support_zone = df['low'].iloc[-40:-10].min()
 resistance_zone = df['high'].iloc[-40:-10].max()
 
-at_support = abs(close - support_zone) / close < 0.008  # קרבה של עד 0.8% לתמיכה
-at_resistance = abs(close - resistance_zone) / close < 0.008  # קרבה של עד 0.8% להתנגדות
-
-# חיזוק הציון (Confluences)
-if is_bullish:
-    if in_bullish_golden_zone:
-        score += 15
-        confluences.append("Fibonacci Golden Zone (61.8%-78.6%)")
-    if at_support:
-        score += 10
-        confluences.append("Key Support / Order Block Rejection")
-
-elif is_bearish:
-    if in_bearish_golden_zone:
-        score += 15
-        confluences.append("Fibonacci Golden Zone (61.8%-78.6%)")
-    if at_resistance:
-        score += 10
-        confluences.append("Key Resistance / Order Block Rejection")
+at_support = abs(close - support_zone) / close < 0.008
+at_resistance = abs(close - resistance_zone) / close < 0.008
