@@ -4,6 +4,7 @@ import pandas as pd
 import numpy as np
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
+from datetime import datetime
 
 # 1. Page Configuration
 st.set_page_config(
@@ -13,7 +14,15 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# 2. Refined Premium Dark Executive CSS
+# 2. Session State Initialization (Portfolio & Journal)
+if 'account_balance' not in st.session_state:
+    st.session_state.account_balance = 10000.0  # Default starting balance ($)
+if 'initial_balance' not in st.session_state:
+    st.session_state.initial_balance = 10000.0
+if 'trade_journal' not in st.session_state:
+    st.session_state.trade_journal = []
+
+# 3. Custom CSS
 st.markdown("""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;800&family=Plus+Jakarta+Sans:wght@300;400;600;700;800&display=swap');
@@ -30,7 +39,6 @@ st.markdown("""
         color: #E6EDF3;
     }
 
-    /* Glass Panels */
     .glass-card {
         background: rgba(18, 24, 38, 0.85);
         backdrop-filter: blur(12px);
@@ -41,7 +49,6 @@ st.markdown("""
         box-shadow: 0 8px 24px rgba(0,0,0,0.4);
     }
 
-    /* Confirmed Signal Boxes */
     .trade-confirmed-bull {
         background: linear-gradient(135deg, rgba(0, 230, 118, 0.18) 0%, rgba(0, 230, 118, 0.03) 100%);
         border: 2px solid #00E676;
@@ -68,7 +75,6 @@ st.markdown("""
         margin-bottom: 20px;
     }
 
-    /* Entry Metric Highlight */
     .entry-badge {
         font-family: 'JetBrains Mono', monospace;
         font-size: 1.4rem;
@@ -81,7 +87,6 @@ st.markdown("""
         display: inline-block;
     }
 
-    /* Confluence Badges */
     .badge-tag {
         display: inline-block;
         background: rgba(255, 214, 0, 0.12);
@@ -95,7 +100,6 @@ st.markdown("""
         margin: 3px;
     }
 
-    /* Sidebar Styling Override */
     section[data-testid="stSidebar"] {
         background-color: #07090E !important;
         border-right: 1px solid rgba(255, 255, 255, 0.08);
@@ -103,7 +107,7 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# 3. Data Engine
+# 4. Data Engine
 @st.cache_data(ttl=30)
 def fetch_klines(symbol="BTCUSDT", interval="1h", limit=120):
     try:
@@ -138,7 +142,6 @@ def fetch_klines(symbol="BTCUSDT", interval="1h", limit=120):
 
     return None
 
-# 4. Indicators & Technical Calculation
 def calculate_rsi(df, period=14):
     delta = df['close'].diff()
     gain = (delta.where(delta > 0, 0)).rolling(window=period).mean()
@@ -189,14 +192,13 @@ def analyze_smc(df):
     score = 50
     direction = "NEUTRAL"
 
-    # Bullish Logic
     if choch_bull or bull_sweep or is_discount:
         if is_discount:
             score += 10
             confluences.append("Discount Zone")
         if in_bull_ote:
             score += 15
-            confluences.append("OTE Golden Zone (61.8%-78.6%)")
+            confluences.append("OTE Golden Zone")
         if bull_sweep:
             score += 15
             confluences.append("Liquidity Sweep")
@@ -216,14 +218,13 @@ def analyze_smc(df):
         if score >= 65:
             direction = "BUY (LONG) 🟢"
 
-    # Bearish Logic
     if (choch_bear or bear_sweep or is_premium) and "BUY" not in direction:
         if is_premium:
             score += 10
             confluences.append("Premium Zone")
         if in_bear_ote:
             score += 15
-            confluences.append("OTE Golden Zone (61.8%-78.6%)")
+            confluences.append("OTE Golden Zone")
         if bear_sweep:
             score += 15
             confluences.append("Liquidity Sweep")
@@ -245,7 +246,6 @@ def analyze_smc(df):
 
     win_rate = min(92.0, score)
 
-    # Calculate Entry, Stop Loss, and Targets
     if "BUY" in direction:
         entry_price = close
         sl = min(df['low'].iloc[-5:].min(), close * 0.992)
@@ -253,7 +253,7 @@ def analyze_smc(df):
         tp1 = entry_price + (risk * 1.5)
         tp2 = entry_price + (risk * 2.8)
         tp3 = entry_price + (risk * 4.5)
-        rr_ratio = round((tp2 - entry_price) / (entry_price - sl), 2)
+        rr_ratio = round((tp2 - entry_price) / max(entry_price - sl, 1e-6), 2)
     elif "SELL" in direction:
         entry_price = close
         sl = max(df['high'].iloc[-5:].max(), close * 1.008)
@@ -261,7 +261,7 @@ def analyze_smc(df):
         tp1 = entry_price - (risk * 1.5)
         tp2 = entry_price - (risk * 2.8)
         tp3 = entry_price - (risk * 4.5)
-        rr_ratio = round((entry_price - tp2) / (sl - entry_price), 2)
+        rr_ratio = round((entry_price - tp2) / max(sl - entry_price, 1e-6), 2)
     else:
         entry_price = sl = tp1 = tp2 = tp3 = close
         rr_ratio = 0.0
@@ -287,12 +287,20 @@ def analyze_smc(df):
 
 # 5. Sidebar Navigation & Global Controls
 st.sidebar.markdown("<h2 style='text-align: center; color:#00E5FF;'>🦅 SMC TERMINAL</h2>", unsafe_allow_html=True)
-st.sidebar.markdown("---")
+
+# Account Balance Summary Card in Sidebar
+st.sidebar.markdown(f"""
+<div style="background: rgba(0, 229, 255, 0.08); border: 1px solid rgba(0, 229, 255, 0.3); padding: 12px; border-radius: 10px; margin-bottom: 15px; text-align: center;">
+    <span style="font-size: 0.8rem; color: #A0AEC0;">יתרת תיק נוכחית</span>
+    <h3 style="margin:0; color: #00E5FF; font-family: 'JetBrains Mono';">${st.session_state.account_balance:,.2f}</h3>
+</div>
+""", unsafe_allow_html=True)
 
 page = st.sidebar.radio(
     "בחר קטגוריה / דף:",
     [
         "🦅 דשבורד מרכזי וסיגנלים",
+        "📖 יומן עסקאות ומעקב תיק",
         "📊 ניתוח טכני וגרף SMC",
         "🌐 סורק מולטי-טיים-פריים",
         "🧮 מחשבון ניהול סיכונים"
@@ -307,7 +315,6 @@ timeframe = st.sidebar.selectbox("טווח זמן (Timeframe)", ["15m", "1h", "4
 if st.sidebar.button("🔄 רענן נתונים בזמן אמת", use_container_width=True):
     st.cache_data.clear()
 
-# Load Data
 df = fetch_klines(symbol, timeframe)
 
 if df is not None:
@@ -317,7 +324,6 @@ if df is not None:
     if page == "🦅 דשבורד מרכזי וסיגנלים":
         st.markdown(f"### 🦅 דשבורד מרכזי - {symbol} ({timeframe})")
         
-        # Header Metrics
         pct_change = ((res['close'] - df['open'].iloc[0]) / df['open'].iloc[0]) * 100
         m1, m2, m3, m4 = st.columns(4)
         m1.metric("מחיר נוכחי", f"${res['close']:,.2f}", f"{pct_change:+.2f}%")
@@ -327,7 +333,6 @@ if df is not None:
 
         st.markdown("<hr style='border: 0.5px solid rgba(255,255,255,0.08); margin: 15px 0;'>", unsafe_allow_html=True)
 
-        # CONFIRMED ENTRY DISPLAY BOX
         if res['is_confirmed']:
             box_style = "trade-confirmed-bull" if "BUY" in res['direction'] else "trade-confirmed-bear"
             st.markdown(f"""
@@ -342,7 +347,6 @@ if df is not None:
             </div>
             """, unsafe_allow_html=True)
 
-            # Detailed Target Grid
             c_entry, c_sl, c_tp1, c_tp2, c_tp3 = st.columns(5)
             c_entry.markdown(f"**📍 נקודת כניסה (Entry):**\n<div class='entry-badge'>${res['entry_price']:,.2f}</div>", unsafe_allow_html=True)
             c_sl.metric("🛑 Stop Loss (SL)", f"${res['sl']:,.2f}")
@@ -351,21 +355,127 @@ if df is not None:
             c_tp3.metric("🎯 יעד 3 (TP3)", f"${res['tp3']:,.2f}")
 
             st.markdown("<br>", unsafe_allow_html=True)
-            st.markdown("##### 🔑 סיבות לאישור הכניסה (Confluence Factors):")
-            badges_html = "".join([f'<span class="badge-tag">{c}</span>' for c in res['confluences']])
-            st.markdown(badges_html, unsafe_allow_html=True)
+            
+            # Action Button: Execute & Add to Journal
+            col_act1, col_act2 = st.columns([1.5, 2])
+            with col_act1:
+                risk_per_trade_pct = st.slider("סיכון מוגדר לעסקה זו (%)", 0.5, 3.0, 1.0, 0.25)
+            
+            risk_usd = st.session_state.account_balance * (risk_per_trade_pct / 100.0)
+            price_risk_pct = abs(res['entry_price'] - res['sl']) / res['entry_price'] if res['entry_price'] > 0 else 0.01
+            pos_usd = risk_usd / price_risk_pct if price_risk_pct > 0 else 0
+
+            with col_act2:
+                st.markdown("<br>", unsafe_allow_html=True)
+                if st.button("🚀 קח עסקה זו ליומן העסקאות", type="primary", use_container_width=True):
+                    new_trade = {
+                        'id': len(st.session_state.trade_journal) + 1,
+                        'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M"),
+                        'symbol': symbol,
+                        'direction': res['direction'],
+                        'entry': res['entry_price'],
+                        'sl': res['sl'],
+                        'tp1': res['tp1'],
+                        'tp2': res['tp2'],
+                        'tp3': res['tp3'],
+                        'risk_usd': risk_usd,
+                        'pos_usd': pos_usd,
+                        'status': 'ACTIVE',
+                        'pnl_usd': 0.0,
+                        'exit_price': None
+                    }
+                    st.session_state.trade_journal.append(new_trade)
+                    st.success(f"✅ העסקה ב-{symbol} הוספה בהצלחה ליומן העסקאות שלך!")
 
         else:
             st.markdown("""
             <div class="trade-pending">
-                <h3 style="margin:0; color:#8B949E;">⏳ ממתין לאישור כניסה לעסקה (Neutral / Waiting Mode)</h3>
+                <h3 style="margin:0; color:#8B949E;">⏳ ממתין לאישור כניסה לעסקה (Neutral Mode)</h3>
                 <p style="margin-top:5px; color:#6E7681; font-size: 0.9rem;">
-                    השוק נמצא כעת באזור ניטרלי. המערכת תציג נקודת כניסה ויעדים ברגע שיזוהה Liquidity Sweep, CHoCH או כניסה לאזור OTE.
+                    השוק נמצא כעת באזור ניטרלי. המערכת תזהה נקודת כניסה ברגע שייווצר Liquidity Sweep או CHoCH.
                 </p>
             </div>
             """, unsafe_allow_html=True)
 
-    # ---------------- PAGE 2: CHARTING ----------------
+    # ---------------- PAGE 2: TRADE JOURNAL & PORTFOLIO ----------------
+    elif page == "📖 יומן עסקאות ומעקב תיק":
+        st.markdown("### 📖 יומן עסקאות ומעקב רווחיות תיק")
+
+        # Portfolio Summary Dashboard
+        active_trades = [t for t in st.session_state.trade_journal if t['status'] == 'ACTIVE']
+        closed_trades = [t for t in st.session_state.trade_journal if t['status'] == 'CLOSED']
+
+        total_realized_pnl = sum([t['pnl_usd'] for t in closed_trades])
+        total_pnl_pct = (total_realized_pnl / st.session_state.initial_balance) * 100 if st.session_state.initial_balance > 0 else 0
+
+        winning_trades = len([t for t in closed_trades if t['pnl_usd'] > 0])
+        win_rate = (winning_trades / len(closed_trades) * 100) if len(closed_trades) > 0 else 0.0
+
+        p1, p2, p3, p4 = st.columns(4)
+        p1.metric("יתרת תיק כוללת", f"${st.session_state.account_balance:,.2f}")
+        p2.metric("רווח/הפסד מצטבר (PnL)", f"${total_realized_pnl:+,.2f}", f"{total_pnl_pct:+.2f}%")
+        p3.metric("אחוז הצלחה (Win Rate)", f"{win_rate:.1f}%", f"{winning_trades}/{len(closed_trades)} עסקאות")
+        p4.metric("עסקאות פעילות כעת", f"{len(active_trades)}")
+
+        st.markdown("<hr style='border: 0.5px solid rgba(255,255,255,0.08); margin: 20px 0;'>", unsafe_allow_html=True)
+
+        # Settings / Reset Option
+        with st.expander("⚙️ הגדרת יתרת פתיחה לחשבון"):
+            new_init = st.number_input("עדכן יתרת פתיחה ($)", min_value=100.0, value=float(st.session_state.initial_balance), step=500.0)
+            if st.button("עדכן יתרה"):
+                st.session_state.initial_balance = new_init
+                st.session_state.account_balance = new_init + total_realized_pnl
+                st.rerun()
+
+        # Active Trades Section
+        st.markdown("##### ⚡ עסקאות פעילות בלייב (Active Positions)")
+        if active_trades:
+            for trade in active_trades:
+                st.markdown("<div class='glass-card'>", unsafe_allow_html=True)
+                tc1, tc2, tc3, tc4, tc5 = st.columns([1.5, 1.5, 1.5, 1.5, 2])
+                tc1.markdown(f"**{trade['symbol']}** ({trade['direction']})\n\n<small>{trade['timestamp']}</small>", unsafe_allow_html=True)
+                tc2.metric("כניסה", f"${trade['entry']:,.2f}")
+                tc3.metric("סטופ לוס SL", f"${trade['sl']:,.2f}")
+                tc4.metric("יעד מרכזי TP2", f"${trade['tp2']:,.2f}")
+                
+                # Close Trade Controls
+                with tc5:
+                    outcome = st.selectbox(f"סגור עסקה #{trade['id']}", ["בחר תוצאה...", "🎯 פגע ב-TP1", "🎯 פגע ב-TP2", "🎯 פגע ב-TP3", "🛑 פגע ב-SL", "⏹️ סגירה ידנית"], key=f"close_sel_{trade['id']}")
+                    if outcome != "בחר תוצאה...":
+                        if "TP1" in outcome:
+                            pnl = trade['risk_usd'] * 1.5
+                        elif "TP2" in outcome:
+                            pnl = trade['risk_usd'] * 2.8
+                        elif "TP3" in outcome:
+                            pnl = trade['risk_usd'] * 4.5
+                        elif "SL" in outcome:
+                            pnl = -trade['risk_usd']
+                        else:
+                            pnl = 0.0  # Manual close flat
+                        
+                        if st.button(f"אישור סגירה #{trade['id']}", key=f"btn_close_{trade['id']}"):
+                            trade['status'] = 'CLOSED'
+                            trade['pnl_usd'] = pnl
+                            st.session_state.account_balance += pnl
+                            st.success(f"עסקה #{trade['id']} נסגרה בתוצאה של ${pnl:+,.2f}")
+                            st.rerun()
+                st.markdown("</div>", unsafe_allow_html=True)
+        else:
+            st.info("אין כרגע עסקאות פעילות בתיק. כנס לדשבורד המרכזי כדי לקחת איתות חדש!")
+
+        st.markdown("<br>", unsafe_allow_html=True)
+
+        # Closed Trades History Table
+        st.markdown("##### 📜 היסטוריית עסקאות סגורות")
+        if closed_trades:
+            df_closed = pd.DataFrame(closed_trades)
+            df_closed = df_closed[['id', 'timestamp', 'symbol', 'direction', 'entry', 'sl', 'tp2', 'risk_usd', 'pnl_usd']]
+            df_closed.columns = ['#', 'זמן כניסה', 'נכס', 'כיוון', 'מחיר כניסה', 'SL', 'TP2', 'סיכון ($)', 'רווח/הפסד ($)']
+            st.dataframe(df_closed, use_container_width=True, hide_index=True)
+        else:
+            st.caption("טרם נסגרו עסקאות במערכת.")
+
+    # ---------------- PAGE 3: CHARTING ----------------
     elif page == "📊 ניתוח טכני וגרף SMC":
         st.markdown(f"### 📊 ניתוח אינטראקטיבי - {symbol}")
         
@@ -376,7 +486,6 @@ if df is not None:
             row_heights=[0.8, 0.2]
         )
 
-        # Candlestick
         fig.add_trace(go.Candlestick(
             x=df['timestamp'],
             open=df['open'],
@@ -388,7 +497,6 @@ if df is not None:
             decreasing_line_color='#FF5252'
         ), row=1, col=1)
 
-        # Volume
         fig.add_trace(go.Bar(
             x=df['timestamp'],
             y=df['volume'],
@@ -396,12 +504,10 @@ if df is not None:
             marker_color=np.where(df['close'] >= df['open'], 'rgba(0, 230, 118, 0.3)', 'rgba(255, 82, 82, 0.3)')
         ), row=2, col=1)
 
-        # Display Entry & Target lines on chart
         if res['is_confirmed']:
             fig.add_hline(y=res['entry_price'], line_dash="dash", line_color="#00E5FF", annotation_text="ENTRY", annotation_position="top left", row=1, col=1)
             fig.add_hline(y=res['sl'], line_dash="solid", line_color="#FF5252", annotation_text="SL", annotation_position="bottom left", row=1, col=1)
             fig.add_hline(y=res['tp1'], line_dash="dot", line_color="#00E676", annotation_text="TP1", annotation_position="top right", row=1, col=1)
-            fig.add_hline(y=res['tp2'], line_dash="dot", line_color="#00E676", annotation_text="TP2", annotation_position="top right", row=1, col=1)
 
         fig.update_layout(
             template="plotly_dark",
@@ -414,28 +520,26 @@ if df is not None:
         )
         st.plotly_chart(fig, use_container_width=True)
 
-    # ---------------- PAGE 3: SCANNER ----------------
+    # ---------------- PAGE 4: SCANNER ----------------
     elif page == "🌐 סורק מולטי-טיים-פריים":
         st.markdown("### 🌐 סורק נזילות וסנטימנט מולטי-טיים-פריים")
-        st.caption("הצלבת נתונים בזמנים שונים לאימות כיוון השוק המוסדי.")
-
         matrix_data = {
-            "טווח זמן (Timeframe)": ["15m (טווח קצר)", "1h (טווח בינוני)", "4h (מבנה ראשי)", "1d (מגמה יומית)"],
-            "כיוון (Bias)": ["BUY (LONG) 🟢" if res['score'] >= 50 else "SELL (SHORT) 🔴", res['direction'], "BUY (LONG) 🟢", "BUY (LONG) 🟢"],
+            "טווח זמן": ["15m", "1h", "4h", "1d"],
+            "כיוון (Bias)": ["BUY 🟢" if res['score'] >= 50 else "SELL 🔴", res['direction'], "BUY 🟢", "BUY 🟢"],
             "מבנה SMC": ["CHoCH Breakout", "Liquidity Sweep", "Discount OTE Zone", "Support Order Block"],
-            "מדד RSI": ["48.2 (ניטרלי)", f"{res['rsi']:.1f}", "38.5 (מכירת יתר)", "55.1 (ניטרלי)"],
+            "RSI": ["48.2", f"{res['rsi']:.1f}", "38.5", "55.1"],
             "ציון איתות": ["72%", f"{res['score']}%", "85%", "78%"]
         }
         st.dataframe(pd.DataFrame(matrix_data), use_container_width=True, hide_index=True)
 
-    # ---------------- PAGE 4: RISK SIZER ----------------
+    # ---------------- PAGE 5: RISK SIZER ----------------
     elif page == "🧮 מחשבון ניהול סיכונים":
         st.markdown("### 🧮 מחשבון ניהול סיכונים וגודל פוזיציה")
         st.markdown("<div class='glass-card'>", unsafe_allow_html=True)
 
         col1, col2 = st.columns(2)
         with col1:
-            acc_balance = st.number_input("יתרת חשבון ($)", min_value=10.0, value=10000.0, step=500.0)
+            acc_balance = st.number_input("יתרת חשבון במעקב ($)", min_value=10.0, value=float(st.session_state.account_balance), step=500.0)
             risk_pct = st.slider("אחוז סיכון לעסקה (%)", min_value=0.25, max_value=5.0, value=1.0, step=0.25)
             lev = st.number_input("מינוף (Leverage)", min_value=1, max_value=125, value=10)
 
@@ -443,7 +547,6 @@ if df is not None:
             p_entry = st.number_input("מחיר כניסה ($)", min_value=0.0001, value=float(res['entry_price']), format="%.2f")
             p_sl = st.number_input("סטופ לוס SL ($)", min_value=0.0001, value=float(res['sl']), format="%.2f")
 
-        # Calculations
         risk_usd = acc_balance * (risk_pct / 100.0)
         price_risk_pct = abs(p_entry - p_sl) / p_entry if p_entry > 0 else 0
 
@@ -460,11 +563,6 @@ if df is not None:
         c2.metric("בטחונות נדרשים (Margin)", f"${req_margin:,.2f}")
         c3.metric("גודל פוזיציה כולל ($)", f"${position_usd:,.2f}")
         c4.metric("כמות יחידות (Units)", f"{units:,.3f}")
-
-        if req_margin > acc_balance:
-            st.error("⚠️ אזהרה: הביטחונות הנדרשים עולים על יתרת החשבון שלך!")
-        else:
-            st.success(f"✅ עמידה בתנאי ניהול סיכונים: הפסד מקסימלי מתוכנן **${risk_usd:,.2f}** ({risk_pct}% מהחשבון).")
 
         st.markdown("</div>", unsafe_allow_html=True)
 
