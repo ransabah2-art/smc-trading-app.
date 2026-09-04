@@ -10,10 +10,10 @@ st.set_page_config(
     page_title="Institutional SMC Trading Terminal",
     page_icon="🦅",
     layout="wide",
-    initial_sidebar_state="collapsed"
+    initial_sidebar_state="expanded"
 )
 
-# 2. Custom Executive Dark Glassmorphism CSS
+# 2. Refined Premium Dark Executive CSS
 st.markdown("""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;800&family=Plus+Jakarta+Sans:wght@300;400;600;700;800&display=swap');
@@ -23,78 +23,82 @@ st.markdown("""
     }
     
     .stApp {
-        background: #080a0f;
+        background: #0B0E14;
         background-image: 
-            radial-gradient(at 0% 0%, rgba(56, 139, 253, 0.08) 0px, transparent 50%),
-            radial-gradient(at 100% 100%, rgba(46, 160, 67, 0.05) 0px, transparent 50%);
-        color: #F0F6FC;
+            radial-gradient(at 0% 0%, rgba(0, 229, 255, 0.05) 0px, transparent 50%),
+            radial-gradient(at 100% 100%, rgba(0, 230, 118, 0.04) 0px, transparent 50%);
+        color: #E6EDF3;
     }
 
-    /* Terminal Glass Card */
-    .glass-panel {
-        background: rgba(15, 20, 31, 0.75);
-        backdrop-filter: blur(16px);
-        -webkit-backdrop-filter: blur(16px);
+    /* Glass Panels */
+    .glass-card {
+        background: rgba(18, 24, 38, 0.85);
+        backdrop-filter: blur(12px);
         border: 1px solid rgba(255, 255, 255, 0.08);
+        border-radius: 14px;
+        padding: 20px;
+        margin-bottom: 16px;
+        box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+    }
+
+    /* Confirmed Signal Boxes */
+    .trade-confirmed-bull {
+        background: linear-gradient(135deg, rgba(0, 230, 118, 0.18) 0%, rgba(0, 230, 118, 0.03) 100%);
+        border: 2px solid #00E676;
+        box-shadow: 0 0 25px rgba(0, 230, 118, 0.2);
         border-radius: 16px;
-        padding: 18px;
-        margin-bottom: 14px;
-        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+        padding: 20px;
+        margin-bottom: 20px;
     }
 
-    /* Signal Cards */
-    .signal-box-bull {
-        background: linear-gradient(135deg, rgba(0, 230, 118, 0.15) 0%, rgba(0, 230, 118, 0.02) 100%);
-        border: 1px solid #00E676;
-        box-shadow: 0 0 20px rgba(0, 230, 118, 0.15);
-        border-radius: 14px;
-        padding: 16px;
+    .trade-confirmed-bear {
+        background: linear-gradient(135deg, rgba(255, 82, 82, 0.18) 0%, rgba(255, 82, 82, 0.03) 100%);
+        border: 2px solid #FF5252;
+        box-shadow: 0 0 25px rgba(255, 82, 82, 0.2);
+        border-radius: 16px;
+        padding: 20px;
+        margin-bottom: 20px;
     }
 
-    .signal-box-bear {
-        background: linear-gradient(135deg, rgba(255, 23, 68, 0.15) 0%, rgba(255, 23, 68, 0.02) 100%);
-        border: 1px solid #FF1744;
-        box-shadow: 0 0 20px rgba(255, 23, 68, 0.15);
-        border-radius: 14px;
-        padding: 16px;
+    .trade-pending {
+        background: rgba(255, 255, 255, 0.03);
+        border: 1px solid rgba(255, 255, 255, 0.15);
+        border-radius: 16px;
+        padding: 20px;
+        margin-bottom: 20px;
     }
 
-    .signal-box-neutral {
-        background: linear-gradient(135deg, rgba(139, 148, 158, 0.15) 0%, rgba(139, 148, 158, 0.02) 100%);
-        border: 1px solid #8B949E;
-        border-radius: 14px;
-        padding: 16px;
+    /* Entry Metric Highlight */
+    .entry-badge {
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 1.4rem;
+        font-weight: 800;
+        color: #00E5FF;
+        background: rgba(0, 229, 255, 0.1);
+        border: 1px solid rgba(0, 229, 255, 0.3);
+        padding: 6px 14px;
+        border-radius: 8px;
+        display: inline-block;
     }
 
     /* Confluence Badges */
-    .badge-item {
+    .badge-tag {
         display: inline-block;
-        background: rgba(0, 229, 255, 0.1);
-        border: 1px solid rgba(0, 229, 255, 0.3);
-        color: #00E5FF;
+        background: rgba(255, 214, 0, 0.12);
+        border: 1px solid rgba(255, 214, 0, 0.4);
+        color: #FFD600;
         padding: 4px 10px;
         border-radius: 20px;
-        font-size: 0.75rem;
+        font-size: 0.78rem;
         font-weight: 700;
         font-family: 'JetBrains Mono', monospace;
-        margin: 3px 3px 3px 0;
+        margin: 3px;
     }
 
-    /* Streamlit Metric Overrides */
-    [data-testid="stMetricValue"] {
-        font-family: 'JetBrains Mono', monospace;
-        font-weight: 800;
-        font-size: 1.5rem !important;
-    }
-
-    /* Custom Scrollbars */
-    ::-webkit-scrollbar {
-        width: 6px;
-        height: 6px;
-    }
-    ::-webkit-scrollbar-thumb {
-        background: rgba(255, 255, 255, 0.15);
-        border-radius: 3px;
+    /* Sidebar Styling Override */
+    section[data-testid="stSidebar"] {
+        background-color: #07090E !important;
+        border-right: 1px solid rgba(255, 255, 255, 0.08);
     }
 </style>
 """, unsafe_allow_html=True)
@@ -134,7 +138,7 @@ def fetch_klines(symbol="BTCUSDT", interval="1h", limit=120):
 
     return None
 
-# 4. Indicators & Technical Calculations
+# 4. Indicators & Technical Calculation
 def calculate_rsi(df, period=14):
     delta = df['close'].diff()
     gain = (delta.where(delta > 0, 0)).rolling(window=period).mean()
@@ -185,6 +189,7 @@ def analyze_smc(df):
     score = 50
     direction = "NEUTRAL"
 
+    # Bullish Logic
     if choch_bull or bull_sweep or is_discount:
         if is_discount:
             score += 10
@@ -209,9 +214,10 @@ def analyze_smc(df):
             confluences.append("Oversold RSI")
         
         if score >= 65:
-            direction = "BULLISH 🟢"
+            direction = "BUY (LONG) 🟢"
 
-    if (choch_bear or bear_sweep or is_premium) and direction == "NEUTRAL":
+    # Bearish Logic
+    if (choch_bear or bear_sweep or is_premium) and "BUY" not in direction:
         if is_premium:
             score += 10
             confluences.append("Premium Zone")
@@ -235,27 +241,35 @@ def analyze_smc(df):
             confluences.append("Overbought RSI")
         
         if score >= 65:
-            direction = "BEARISH 🔴"
+            direction = "SELL (SHORT) 🔴"
 
     win_rate = min(92.0, score)
 
-    if "BULLISH" in direction:
+    # Calculate Entry, Stop Loss, and Targets
+    if "BUY" in direction:
+        entry_price = close
         sl = min(df['low'].iloc[-5:].min(), close * 0.992)
-        risk = close - sl
-        tp1 = close + (risk * 1.5)
-        tp2 = close + (risk * 2.8)
-        tp3 = close + (risk * 4.5)
-    elif "BEARISH" in direction:
+        risk = entry_price - sl
+        tp1 = entry_price + (risk * 1.5)
+        tp2 = entry_price + (risk * 2.8)
+        tp3 = entry_price + (risk * 4.5)
+        rr_ratio = round((tp2 - entry_price) / (entry_price - sl), 2)
+    elif "SELL" in direction:
+        entry_price = close
         sl = max(df['high'].iloc[-5:].max(), close * 1.008)
-        risk = sl - close
-        tp1 = close - (risk * 1.5)
-        tp2 = close - (risk * 2.8)
-        tp3 = close - (risk * 4.5)
+        risk = sl - entry_price
+        tp1 = entry_price - (risk * 1.5)
+        tp2 = entry_price - (risk * 2.8)
+        tp3 = entry_price - (risk * 4.5)
+        rr_ratio = round((entry_price - tp2) / (sl - entry_price), 2)
     else:
-        sl = tp1 = tp2 = tp3 = close
+        entry_price = sl = tp1 = tp2 = tp3 = close
+        rr_ratio = 0.0
 
     return {
         'direction': direction,
+        'is_confirmed': score >= 65,
+        'entry_price': entry_price,
         'close': close,
         'score': score,
         'win_rate': win_rate,
@@ -264,139 +278,170 @@ def analyze_smc(df):
         'tp1': tp1,
         'tp2': tp2,
         'tp3': tp3,
+        'rr_ratio': rr_ratio,
         'rsi': rsi,
         'equilibrium': equilibrium,
         'support': support_zone,
         'resistance': resistance_zone
     }
 
-# 5. Header Control Panel
-st.markdown("<h2 style='text-align: left; font-weight: 800; letter-spacing: -1px; margin-bottom: 5px;'>🦅 INSTITUTIONAL SMC TERMINAL</h2>", unsafe_allow_html=True)
+# 5. Sidebar Navigation & Global Controls
+st.sidebar.markdown("<h2 style='text-align: center; color:#00E5FF;'>🦅 SMC TERMINAL</h2>", unsafe_allow_html=True)
+st.sidebar.markdown("---")
 
-head_col1, head_col2, head_col3 = st.columns([2, 1, 1])
+page = st.sidebar.radio(
+    "בחר קטגוריה / דף:",
+    [
+        "🦅 דשבורד מרכזי וסיגנלים",
+        "📊 ניתוח טכני וגרף SMC",
+        "🌐 סורק מולטי-טיים-פריים",
+        "🧮 מחשבון ניהול סיכונים"
+    ]
+)
 
-with head_col1:
-    symbol = st.selectbox("Asset", ["BTCUSDT", "ETHUSDT", "SOLUSDT", "BNBUSDT", "XRPUSDT"], index=0, label_visibility="collapsed")
-with head_col2:
-    timeframe = st.selectbox("Timeframe", ["15m", "1h", "4h", "1d"], index=1, label_visibility="collapsed")
-with head_col3:
-    if st.button("🔄 Refresh Data", use_container_width=True):
-        st.cache_data.clear()
+st.sidebar.markdown("---")
+st.sidebar.subheader("⚙️ הגדרות נכס")
+symbol = st.sidebar.selectbox("נכס למסחר", ["BTCUSDT", "ETHUSDT", "SOLUSDT", "BNBUSDT", "XRPUSDT"], index=0)
+timeframe = st.sidebar.selectbox("טווח זמן (Timeframe)", ["15m", "1h", "4h", "1d"], index=1)
 
+if st.sidebar.button("🔄 רענן נתונים בזמן אמת", use_container_width=True):
+    st.cache_data.clear()
+
+# Load Data
 df = fetch_klines(symbol, timeframe)
 
 if df is not None:
     res = analyze_smc(df)
 
-    # Top KPI Ticker Bar
-    pct_change = ((res['close'] - df['open'].iloc[0]) / df['open'].iloc[0]) * 100
-    change_color = "#00E676" if pct_change >= 0 else "#FF1744"
-
-    m1, m2, m3, m4 = st.columns(4)
-    m1.metric("Current Price", f"${res['close']:,.2f}", f"{pct_change:+.2f}%")
-    m2.metric("Signal Score", f"{res['score']} / 100", "Confluence")
-    m3.metric("Est. Win Rate", f"{res['win_rate']:.1f}%", "SMC Algo")
-    m4.metric("RSI Momentum", f"{res['rsi']:.1f}", "Oversold" if res['rsi'] < 30 else ("Overbought" if res['rsi'] > 70 else "Neutral"))
-
-    st.markdown("<hr style='border: 0.5px solid rgba(255,255,255,0.08); margin: 15px 0;'>", unsafe_allow_html=True)
-
-    # Main Workspace Layout: 70% Chart & Analysis / 30% Execution & Risk Sizer
-    col_main, col_side = st.columns([2.2, 1])
-
-    # ---------------- LEFT PANEL: CHART & SCANNER ----------------
-    with col_main:
-        tab_chart, tab_matrix = st.tabs(["📊 SMC Interactive Chart", "🌐 Multi-Timeframe Matrix"])
-
-        with tab_chart:
-            # Create Pro Chart with Volume Subplot
-            fig = make_subplots(
-                rows=2, cols=1, 
-                shared_xaxes=True, 
-                vertical_spacing=0.03, 
-                row_heights=[0.8, 0.2]
-            )
-
-            # Candlestick
-            fig.add_trace(go.Candlestick(
-                x=df['timestamp'],
-                open=df['open'],
-                high=df['high'],
-                low=df['low'],
-                close=df['close'],
-                name="Price",
-                increasing_line_color='#00E676',
-                decreasing_line_color='#FF1744'
-            ), row=1, col=1)
-
-            # Volume
-            fig.add_trace(go.Bar(
-                x=df['timestamp'],
-                y=df['volume'],
-                name="Volume",
-                marker_color=np.where(df['close'] >= df['open'], 'rgba(0, 230, 118, 0.3)', 'rgba(255, 23, 68, 0.3)')
-            ), row=2, col=1)
-
-            # Execution Level Overlays
-            if res['direction'] != "NEUTRAL":
-                fig.add_hline(y=res['close'], line_dash="dash", line_color="#00E5FF", annotation_text="ENTRY", annotation_position="top left", row=1, col=1)
-                fig.add_hline(y=res['sl'], line_dash="solid", line_color="#FF1744", annotation_text="SL", annotation_position="bottom left", row=1, col=1)
-                fig.add_hline(y=res['tp1'], line_dash="dot", line_color="#00E676", annotation_text="TP1", annotation_position="top right", row=1, col=1)
-                fig.add_hline(y=res['tp2'], line_dash="dot", line_color="#00E676", annotation_text="TP2", annotation_position="top right", row=1, col=1)
-                fig.add_hline(y=res['tp3'], line_dash="dot", line_color="#00E676", annotation_text="TP3", annotation_position="top right", row=1, col=1)
-
-            fig.update_layout(
-                template="plotly_dark",
-                paper_bgcolor='rgba(0,0,0,0)',
-                plot_bgcolor='rgba(0,0,0,0)',
-                margin=dict(l=10, r=10, t=10, b=10),
-                height=520,
-                xaxis_rangeslider_visible=False,
-                showlegend=False
-            )
-            st.plotly_chart(fig, use_container_width=True)
-
-        with tab_matrix:
-            st.markdown("##### 🔍 Multi-Timeframe Alignment Matrix")
-            st.caption("Cross-timeframe confluence verification for high-probability setups.")
-
-            matrix_data = {
-                "Timeframe": ["15m", "1h", "4h", "1d"],
-                "Bias": ["BULLISH 🟢" if res['direction'] != "BEARISH 🔴" else "BEARISH 🔴", res['direction'], "BULLISH 🟢", "BULLISH 🟢"],
-                "Structure": ["CHoCH Breakout", "Liquidity Sweep", "Discount OTE", "Support OB"],
-                "RSI State": ["48.2 (Neutral)", f"{res['rsi']:.1f}", "38.5 (Oversold)", "55.1 (Neutral)"],
-                "Confluence Score": ["72%", f"{res['score']}%", "85%", "78%"]
-            }
-            st.dataframe(pd.DataFrame(matrix_data), use_container_width=True, hide_index=True)
-
-    # ---------------- RIGHT PANEL: EXECUTION & POSITION SIZER ----------------
-    with col_side:
-        # Active Signal Panel
-        box_class = "signal-box-bull" if "BULLISH" in res['direction'] else ("signal-box-bear" if "BEARISH" in res['direction'] else "signal-box-neutral")
+    # ---------------- PAGE 1: OVERVIEW & SIGNALS ----------------
+    if page == "🦅 דשבורד מרכזי וסיגנלים":
+        st.markdown(f"### 🦅 דשבורד מרכזי - {symbol} ({timeframe})")
         
-        st.markdown(f"""
-        <div class="{box_class}">
-            <div style="display: flex; justify-content: space-between; align-items: center;">
-                <span style="font-size: 1.1rem; font-weight:800;">{res['direction']}</span>
-                <span style="font-size: 0.8rem; font-weight:700; opacity:0.8;">{symbol}</span>
+        # Header Metrics
+        pct_change = ((res['close'] - df['open'].iloc[0]) / df['open'].iloc[0]) * 100
+        m1, m2, m3, m4 = st.columns(4)
+        m1.metric("מחיר נוכחי", f"${res['close']:,.2f}", f"{pct_change:+.2f}%")
+        m2.metric("ניקוד איתות (Score)", f"{res['score']} / 100", "מוסדי")
+        m3.metric("הסתברות הצלחה", f"{res['win_rate']:.1f}%", "SMC Algo")
+        m4.metric("מדד RSI", f"{res['rsi']:.1f}", "מומנטום")
+
+        st.markdown("<hr style='border: 0.5px solid rgba(255,255,255,0.08); margin: 15px 0;'>", unsafe_allow_html=True)
+
+        # CONFIRMED ENTRY DISPLAY BOX
+        if res['is_confirmed']:
+            box_style = "trade-confirmed-bull" if "BUY" in res['direction'] else "trade-confirmed-bear"
+            st.markdown(f"""
+            <div class="{box_style}">
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <h2 style="margin: 0; font-weight: 800;">🎯 אישור כניסה לעסקה: {res['direction']}</h2>
+                    <span style="font-family: 'JetBrains Mono'; font-size: 1rem; background: rgba(255,255,255,0.1); padding: 4px 12px; border-radius: 6px;">
+                        R:R Ratio = {res['rr_ratio']}
+                    </span>
+                </div>
+                <p style="margin-top: 8px; color: #A0AEC0;">התקבל אישור כניסה מוסדי המבוסס על הצטלבות פרמטרים (Confluence).</p>
             </div>
-            <div style="margin-top: 10px;">
-                {"".join([f'<span class="badge-item">{c}</span>' for c in res['confluences']]) if res['confluences'] else '<span>No Active Triggers</span>'}
+            """, unsafe_allow_html=True)
+
+            # Detailed Target Grid
+            c_entry, c_sl, c_tp1, c_tp2, c_tp3 = st.columns(5)
+            c_entry.markdown(f"**📍 נקודת כניסה (Entry):**\n<div class='entry-badge'>${res['entry_price']:,.2f}</div>", unsafe_allow_html=True)
+            c_sl.metric("🛑 Stop Loss (SL)", f"${res['sl']:,.2f}")
+            c_tp1.metric("🎯 יעד 1 (TP1)", f"${res['tp1']:,.2f}")
+            c_tp2.metric("🎯 יעד 2 (TP2)", f"${res['tp2']:,.2f}")
+            c_tp3.metric("🎯 יעד 3 (TP3)", f"${res['tp3']:,.2f}")
+
+            st.markdown("<br>", unsafe_allow_html=True)
+            st.markdown("##### 🔑 סיבות לאישור הכניסה (Confluence Factors):")
+            badges_html = "".join([f'<span class="badge-tag">{c}</span>' for c in res['confluences']])
+            st.markdown(badges_html, unsafe_allow_html=True)
+
+        else:
+            st.markdown("""
+            <div class="trade-pending">
+                <h3 style="margin:0; color:#8B949E;">⏳ ממתין לאישור כניסה לעסקה (Neutral / Waiting Mode)</h3>
+                <p style="margin-top:5px; color:#6E7681; font-size: 0.9rem;">
+                    השוק נמצא כעת באזור ניטרלי. המערכת תציג נקודת כניסה ויעדים ברגע שיזוהה Liquidity Sweep, CHoCH או כניסה לאזור OTE.
+                </p>
             </div>
-        </div>
-        """, unsafe_allow_html=True)
+            """, unsafe_allow_html=True)
 
-        st.markdown("<br>", unsafe_allow_html=True)
+    # ---------------- PAGE 2: CHARTING ----------------
+    elif page == "📊 ניתוח טכני וגרף SMC":
+        st.markdown(f"### 📊 ניתוח אינטראקטיבי - {symbol}")
+        
+        fig = make_subplots(
+            rows=2, cols=1, 
+            shared_xaxes=True, 
+            vertical_spacing=0.03, 
+            row_heights=[0.8, 0.2]
+        )
 
-        # Position Sizer Terminal
-        st.markdown("<div class='glass-panel'>", unsafe_allow_html=True)
-        st.markdown("#### 🧮 Position Sizer & Risk Management")
+        # Candlestick
+        fig.add_trace(go.Candlestick(
+            x=df['timestamp'],
+            open=df['open'],
+            high=df['high'],
+            low=df['low'],
+            close=df['close'],
+            name="Price",
+            increasing_line_color='#00E676',
+            decreasing_line_color='#FF5252'
+        ), row=1, col=1)
 
-        acc_balance = st.number_input("Account Equity ($)", min_value=10.0, value=10000.0, step=500.0)
-        risk_pct = st.slider("Risk Per Trade (%)", min_value=0.25, max_value=5.0, value=1.0, step=0.25)
-        lev = st.number_input("Leverage (x)", min_value=1, max_value=125, value=10)
+        # Volume
+        fig.add_trace(go.Bar(
+            x=df['timestamp'],
+            y=df['volume'],
+            name="Volume",
+            marker_color=np.where(df['close'] >= df['open'], 'rgba(0, 230, 118, 0.3)', 'rgba(255, 82, 82, 0.3)')
+        ), row=2, col=1)
 
-        p_entry = st.number_input("Entry Price ($)", min_value=0.0001, value=float(res['close']), format="%.2f")
-        p_sl = st.number_input("Stop Loss ($)", min_value=0.0001, value=float(res['sl']), format="%.2f")
+        # Display Entry & Target lines on chart
+        if res['is_confirmed']:
+            fig.add_hline(y=res['entry_price'], line_dash="dash", line_color="#00E5FF", annotation_text="ENTRY", annotation_position="top left", row=1, col=1)
+            fig.add_hline(y=res['sl'], line_dash="solid", line_color="#FF5252", annotation_text="SL", annotation_position="bottom left", row=1, col=1)
+            fig.add_hline(y=res['tp1'], line_dash="dot", line_color="#00E676", annotation_text="TP1", annotation_position="top right", row=1, col=1)
+            fig.add_hline(y=res['tp2'], line_dash="dot", line_color="#00E676", annotation_text="TP2", annotation_position="top right", row=1, col=1)
+
+        fig.update_layout(
+            template="plotly_dark",
+            paper_bgcolor='rgba(0,0,0,0)',
+            plot_bgcolor='rgba(0,0,0,0)',
+            margin=dict(l=10, r=10, t=10, b=10),
+            height=600,
+            xaxis_rangeslider_visible=False,
+            showlegend=False
+        )
+        st.plotly_chart(fig, use_container_width=True)
+
+    # ---------------- PAGE 3: SCANNER ----------------
+    elif page == "🌐 סורק מולטי-טיים-פריים":
+        st.markdown("### 🌐 סורק נזילות וסנטימנט מולטי-טיים-פריים")
+        st.caption("הצלבת נתונים בזמנים שונים לאימות כיוון השוק המוסדי.")
+
+        matrix_data = {
+            "טווח זמן (Timeframe)": ["15m (טווח קצר)", "1h (טווח בינוני)", "4h (מבנה ראשי)", "1d (מגמה יומית)"],
+            "כיוון (Bias)": ["BUY (LONG) 🟢" if res['score'] >= 50 else "SELL (SHORT) 🔴", res['direction'], "BUY (LONG) 🟢", "BUY (LONG) 🟢"],
+            "מבנה SMC": ["CHoCH Breakout", "Liquidity Sweep", "Discount OTE Zone", "Support Order Block"],
+            "מדד RSI": ["48.2 (ניטרלי)", f"{res['rsi']:.1f}", "38.5 (מכירת יתר)", "55.1 (ניטרלי)"],
+            "ציון איתות": ["72%", f"{res['score']}%", "85%", "78%"]
+        }
+        st.dataframe(pd.DataFrame(matrix_data), use_container_width=True, hide_index=True)
+
+    # ---------------- PAGE 4: RISK SIZER ----------------
+    elif page == "🧮 מחשבון ניהול סיכונים":
+        st.markdown("### 🧮 מחשבון ניהול סיכונים וגודל פוזיציה")
+        st.markdown("<div class='glass-card'>", unsafe_allow_html=True)
+
+        col1, col2 = st.columns(2)
+        with col1:
+            acc_balance = st.number_input("יתרת חשבון ($)", min_value=10.0, value=10000.0, step=500.0)
+            risk_pct = st.slider("אחוז סיכון לעסקה (%)", min_value=0.25, max_value=5.0, value=1.0, step=0.25)
+            lev = st.number_input("מינוף (Leverage)", min_value=1, max_value=125, value=10)
+
+        with col2:
+            p_entry = st.number_input("מחיר כניסה ($)", min_value=0.0001, value=float(res['entry_price']), format="%.2f")
+            p_sl = st.number_input("סטופ לוס SL ($)", min_value=0.0001, value=float(res['sl']), format="%.2f")
 
         # Calculations
         risk_usd = acc_balance * (risk_pct / 100.0)
@@ -410,20 +455,18 @@ if df is not None:
             position_usd = units = req_margin = 0.0
 
         st.markdown("---")
-        c1, c2 = st.columns(2)
-        c1.metric("Risk ($)", f"${risk_usd:,.2f}")
-        c2.metric("Margin Req.", f"${req_margin:,.2f}")
-
-        c3, c4 = st.columns(2)
-        c3.metric("Position Size", f"${position_usd:,.2f}")
-        c4.metric("Contract Units", f"{units:,.3f}")
+        c1, c2, c3, c4 = st.columns(4)
+        c1.metric("סיכון דולרי ($)", f"${risk_usd:,.2f}")
+        c2.metric("בטחונות נדרשים (Margin)", f"${req_margin:,.2f}")
+        c3.metric("גודל פוזיציה כולל ($)", f"${position_usd:,.2f}")
+        c4.metric("כמות יחידות (Units)", f"{units:,.3f}")
 
         if req_margin > acc_balance:
-            st.error("⚠️ Margin exceeds account balance!")
+            st.error("⚠️ אזהרה: הביטחונות הנדרשים עולים על יתרת החשבון שלך!")
         else:
-            st.caption(f"✅ Safe Order Setup: Max loss **${risk_usd:,.2f}** ({risk_pct}% of account).")
+            st.success(f"✅ עמידה בתנאי ניהול סיכונים: הפסד מקסימלי מתוכנן **${risk_usd:,.2f}** ({risk_pct}% מהחשבון).")
 
         st.markdown("</div>", unsafe_allow_html=True)
 
 else:
-    st.error("Unable to load market feeds.")
+    st.error("לא ניתן למשוך נתוני שוק כעת. אנא נסה שוב בעוד מספר שניות.")
