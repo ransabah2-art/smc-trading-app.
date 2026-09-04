@@ -10,3 +10,4 @@ six==1.17.0
 urllib3==2.7.0
 plotly
 streamlit
+yfinance
