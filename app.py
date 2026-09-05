@@ -219,7 +219,6 @@ def analyze_smc_advanced(df, df_4h=None, funding_rate=0.01, ls_ratio=1.15):
     bull_sweep = df['low'].iloc[-1] < prev_low and close > prev_low
     htf_bias = "BULLISH" if df_4h is not None and df_4h['close'].iloc[-1] > df_4h['close'].iloc[-20] else "BEARISH"
 
-    # Calculate Cumulative Volume Delta (CVD) Approximation
     delta = np.where(df['close'] >= df['open'], df['volume'] * 0.6, -df['volume'] * 0.6)
     cvd = np.cumsum(delta)
     cvd_trend = "BULLISH" if cvd[-1] > cvd[-10] else "BEARISH"
@@ -229,7 +228,7 @@ def analyze_smc_advanced(df, df_4h=None, funding_rate=0.01, ls_ratio=1.15):
     
     if is_discount: score += 10; confluences.append("Discount Zone")
     if bull_sweep: score += 15; confluences.append("Liquidity Sweep")
-    if htf_bias == "BULLISH": score += 15; confluences.append("4h HTF Bias")
+    if htf_bias == "BULLISH": score += 15; confluences.append("4h HTF Bias Alignment")
     if cvd_trend == "BULLISH": score += 10; confluences.append("CVD Volume Delta Alignment")
     if ls_ratio < 1.0: score += 10; confluences.append("Institutional Short-Squeeze Setup")
 
@@ -348,7 +347,6 @@ if current_page == 'main':
     with col_chart:
         fig = make_subplots(rows=3, cols=1, shared_xaxes=True, vertical_spacing=0.03, row_heights=[0.6, 0.2, 0.2])
         
-        # Candles & SMC Zones
         fig.add_trace(go.Candlestick(
             x=df['timestamp'], open=df['open'], high=df['high'], low=df['low'], close=df['close'],
             increasing_line_color='#00E676', decreasing_line_color='#FF1744'
@@ -365,13 +363,11 @@ if current_page == 'main':
         fig.add_hline(y=res['sl'], line_dash="solid", line_color="#FF1744", annotation_text="SL", row=1, col=1)
         fig.add_hline(y=res['tp1'], line_dash="dot", line_color="#00E676", annotation_text="TP1", row=1, col=1)
 
-        # Volume
         fig.add_trace(go.Bar(
             x=df['timestamp'], y=df['volume'],
             marker_color=np.where(df['close'] >= df['open'], 'rgba(0, 230, 118, 0.4)', 'rgba(255, 23, 68, 0.4)')
         ), row=2, col=1)
 
-        # CVD Indicator Line
         fig.add_trace(go.Scatter(
             x=df['timestamp'], y=res['cvd'], line=dict(color='#00E5FF', width=2), name="CVD Volume Delta"
         ), row=3, col=1)
@@ -453,19 +449,59 @@ elif current_page == 'performance':
         st.dataframe(df_p[['id', 'timestamp', 'symbol', 'direction', 'entry', 'risk_usd', 'pnl_usd']], use_container_width=True)
 
 # =========================================================================
-# OTHER PAGES
+# PAGE 3: ORDER FLOW & SMC DETAILED VIEW (FIXED UI)
 # =========================================================================
 elif current_page == 'signal_details':
     if st.button("🔙 חזרה לטרמינל"): navigate_to('main')
-    st.markdown("### 🔬 פירוט Order Flow וניתוח שוק")
-    col_a, col_b = st.columns(2)
-    with col_a:
-        st.write("Order Blocks פעילים:", res['obs'])
-        st.write("Fair Value Gaps שנמצאו:", res['fvgs'])
-    with col_b:
-        st.write("מגמת CVD:", res['cvd_trend'])
-        st.write("קונפלואנסים שנמצאו:", res['confluences'])
+    st.markdown(f"### 🔬 ניתוח עומק מוסדי: {symbol}")
+    
+    col_left, col_right = st.columns(2)
+    
+    with col_left:
+        st.markdown("#### 🧱 בלוקי פקודות מוסדיים (Order Blocks)")
+        if res['obs']:
+            ob_list = []
+            for ob in res['obs']:
+                ob_list.append({
+                    "סוג בלוק": "קנייה מוסדית (Bullish OB) 🟢" if ob['type'] == 'BULL_OB' else "מכירה מוסדית (Bearish OB) 🔴",
+                    "רמת תחתית": f"${ob['low']:,.2f}",
+                    "רמת תקרה": f"${ob['high']:,.2f}",
+                    "זמן זיהוי": pd.to_datetime(ob['time']).strftime("%d/%m %H:%M")
+                })
+            st.dataframe(pd.DataFrame(ob_list), use_container_width=True)
+        else:
+            st.info("לא זוהו בלוקי פקודות פעילים בטווח הנוכחי")
 
+        st.markdown("#### ⚡ פערי נזילות (Fair Value Gaps)")
+        if res['fvgs']:
+            fvg_list = []
+            for fvg in res['fvgs']:
+                fvg_list.append({
+                    "סוג פער": "פער עליות (Bullish FVG) 🟢" if fvg['type'] == 'BULLISH' else "פער ירידות (Bearish FVG) 🔴",
+                    "תחתית פער": f"${fvg['bottom']:,.2f}",
+                    "תקרת פער": f"${fvg['top']:,.2f}",
+                    "זמן זיהוי": pd.to_datetime(fvg['time']).strftime("%d/%m %H:%M")
+                })
+            st.dataframe(pd.DataFrame(fvg_list), use_container_width=True)
+        else:
+            st.info("לא זוהו פערי נזילות פעילים בטווח הנוכחי")
+
+    with col_right:
+        st.markdown("#### 📊 אינדיקטורים וסיגנלים משלימים")
+        m_col1, m_col2 = st.columns(2)
+        m_col1.metric("מגמת CVD", res['cvd_trend'])
+        m_col2.metric("יחס Long/Short", f"{ls_ratio:.2f}")
+
+        st.markdown("#### 🎯 קונפלואנסים פעילים (אישורי כניסה)")
+        if res['confluences']:
+            for conf in res['confluences']:
+                st.success(f"✓ {conf}")
+        else:
+            st.warning("אין קונפלואנסים פעילים כרגע")
+
+# =========================================================================
+# OTHER PAGES
+# =========================================================================
 elif current_page == 'journal':
     if st.button("🔙 חזרה לטרמינל"): navigate_to('main')
     st.markdown("### 📖 יומן עסקאות קבוע (SQLite)")
