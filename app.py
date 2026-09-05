@@ -101,6 +101,16 @@ st.markdown("""
         font-family: 'JetBrains Mono', monospace;
         font-size: 0.8rem;
     }
+
+    .trade-level-box {
+        background: rgba(255, 255, 255, 0.03);
+        border: 1px solid rgba(255, 255, 255, 0.06);
+        border-radius: 10px;
+        padding: 14px;
+        margin-top: 10px;
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 0.88rem;
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -111,7 +121,6 @@ def fetch_klines(symbol="BTCUSDT", interval="1h", limit=120):
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
     }
     
-    # Attempt 1: Binance Futures API
     try:
         url = f"https://fapi.binance.com/fapi/v1/klines?symbol={symbol}&interval={interval}&limit={limit}"
         res = requests.get(url, headers=headers, timeout=4)
@@ -125,7 +134,6 @@ def fetch_klines(symbol="BTCUSDT", interval="1h", limit=120):
     except Exception:
         pass
 
-    # Attempt 2: Binance Spot API Fallback
     try:
         url = f"https://api.binance.com/api/v3/klines?symbol={symbol}&interval={interval}&limit={limit}"
         res = requests.get(url, headers=headers, timeout=4)
@@ -139,7 +147,6 @@ def fetch_klines(symbol="BTCUSDT", interval="1h", limit=120):
     except Exception:
         pass
 
-    # Attempt 3: Synthetic Failsafe Data (Ensures system never breaks)
     dates = pd.date_range(end=pd.Timestamp.now(), periods=limit, freq=interval.replace('m', 'min'))
     np.random.seed(int(pd.Timestamp.now().timestamp()) % 100000)
     base_price = 68500.0 if "BTC" in symbol else (3550.0 if "ETH" in symbol else 145.0)
@@ -295,7 +302,7 @@ if current_page == 'main':
 
     st.markdown("<br>", unsafe_allow_html=True)
 
-    col_chart, col_quick_trade = st.columns([3, 1])
+    col_chart, col_quick_trade = st.columns([2.8, 1.2])
 
     with col_chart:
         fig = make_subplots(rows=2, cols=1, shared_xaxes=True, vertical_spacing=0.03, row_heights=[0.8, 0.2])
@@ -309,24 +316,59 @@ if current_page == 'main':
             marker_color=np.where(df['close'] >= df['open'], 'rgba(0, 230, 118, 0.3)', 'rgba(255, 23, 68, 0.3)')
         ), row=2, col=1)
 
-        if res['is_confirmed']:
-            fig.add_hline(y=res['entry'], line_dash="dash", line_color="#00E5FF", row=1, col=1)
-            fig.add_hline(y=res['sl'], line_dash="solid", line_color="#FF1744", row=1, col=1)
-            fig.add_hline(y=res['tp2'], line_dash="dot", line_color="#00E676", row=1, col=1)
+        # Highlight Levels on Chart
+        fig.add_hline(y=res['entry'], line_dash="dash", line_color="#00E5FF", annotation_text="Entry", row=1, col=1)
+        fig.add_hline(y=res['sl'], line_dash="solid", line_color="#FF1744", annotation_text="SL", row=1, col=1)
+        fig.add_hline(y=res['tp1'], line_dash="dot", line_color="#00E676", annotation_text="TP1", row=1, col=1)
+        fig.add_hline(y=res['tp2'], line_dash="dot", line_color="#00E676", annotation_text="TP2", row=1, col=1)
 
-        fig.update_layout(template="plotly_dark", paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', height=480, showlegend=False, margin=dict(l=10, r=10, t=10, b=10))
+        fig.update_layout(template="plotly_dark", paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', height=520, showlegend=False, margin=dict(l=10, r=10, t=10, b=10))
         st.plotly_chart(fig, use_container_width=True)
 
     with col_quick_trade:
         st.markdown("<div class='drill-card'>", unsafe_allow_html=True)
-        st.markdown("#### ⚡ ביצוע מהיר")
+        st.markdown("#### 🎯 פרטי עסקה ורמות יעד")
         risk_usd = st.session_state.account_balance * 0.01
-        st.write(f"נכס: **{symbol}**")
-        st.write(f"כניסה: **${res['entry']:,.2f}**")
-        st.write(f"סיכון 1%: **${risk_usd:,.2f}**")
+
+        # Direct Numbers Display
+        st.markdown(f"""
+        <div class="trade-level-box">
+            <div style="display:flex; justify-content:space-between; margin-bottom: 8px;">
+                <span style="color:#8A99AD;">נכס נבחר:</span>
+                <strong>{symbol}</strong>
+            </div>
+            <div style="display:flex; justify-content:space-between; margin-bottom: 8px;">
+                <span style="color:#8A99AD;">כניסה (Entry):</span>
+                <strong style="color:#00E5FF;">${res['entry']:,.2f}</strong>
+            </div>
+            <div style="display:flex; justify-content:space-between; margin-bottom: 8px;">
+                <span style="color:#8A99AD;">סטופ לוס (SL):</span>
+                <strong style="color:#FF1744;">${res['sl']:,.2f}</strong>
+            </div>
+            <hr style="border-color: rgba(255,255,255,0.08); margin: 8px 0;">
+            <div style="display:flex; justify-content:space-between; margin-bottom: 6px;">
+                <span style="color:#8A99AD;">יעד 1 (TP1 - 1.5R):</span>
+                <strong style="color:#00E676;">${res['tp1']:,.2f}</strong>
+            </div>
+            <div style="display:flex; justify-content:space-between; margin-bottom: 6px;">
+                <span style="color:#8A99AD;">יעד 2 (TP2 - 2.8R):</span>
+                <strong style="color:#00E676;">${res['tp2']:,.2f}</strong>
+            </div>
+            <div style="display:flex; justify-content:space-between; margin-bottom: 8px;">
+                <span style="color:#8A99AD;">יעד 3 (TP3 - 4.5R):</span>
+                <strong style="color:#00E676;">${res['tp3']:,.2f}</strong>
+            </div>
+            <hr style="border-color: rgba(255,255,255,0.08); margin: 8px 0;">
+            <div style="display:flex; justify-content:space-between;">
+                <span style="color:#8A99AD;">יחס R:R:</span>
+                <strong style="color:#00E5FF;">1:{res['rr']}</strong>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
         
+        st.markdown("<br>", unsafe_allow_html=True)
         if res['is_confirmed']:
-            if st.button("🚀 כניסה לעסקה", type="primary", use_container_width=True):
+            if st.button("🚀 כניסה לעסקה (1% הסיכון)", type="primary", use_container_width=True):
                 st.session_state.trade_journal.append({
                     'id': len(st.session_state.trade_journal) + 1,
                     'timestamp': datetime.now().strftime("%d/%m %H:%M"),
@@ -334,7 +376,9 @@ if current_page == 'main':
                     'direction': res['direction'],
                     'entry': res['entry'],
                     'sl': res['sl'],
+                    'tp1': res['tp1'],
                     'tp2': res['tp2'],
+                    'tp3': res['tp3'],
                     'risk_usd': risk_usd,
                     'status': 'ACTIVE',
                     'pnl_usd': 0.0
@@ -342,7 +386,7 @@ if current_page == 'main':
                 st.success("העסקה נכנסה ליומן!")
                 st.rerun()
         else:
-            st.button("ממתין לאיתות...", disabled=True, use_container_width=True)
+            st.button("ממתין לאישור איתות SMC...", disabled=True, use_container_width=True)
         st.markdown("</div>", unsafe_allow_html=True)
 
 # =========================================================================
@@ -396,9 +440,12 @@ elif current_page == 'signal_details':
 
     with d2:
         st.markdown("<div class='drill-card'>", unsafe_allow_html=True)
-        st.markdown("#### 🎯 מטריצת סנכרון זמנים (Multi-Timeframe)")
-        st.write(f"מגמת על בגרף 4h: **{res['htf_bias']}**")
-        st.write(f"אזור מבנה בגרף 1h: **{'Discount Zone' if res['entry'] < (df['high'].max()+df['low'].min())/2 else 'Premium Zone'}**")
+        st.markdown("#### 🎯 פירוט רמות יעד מחושבות")
+        st.write(f"מחיר כניסה: **${res['entry']:,.2f}**")
+        st.write(f"סטופ לוס: **${res['sl']:,.2f}**")
+        st.write(f"Take Profit 1: **${res['tp1']:,.2f}**")
+        st.write(f"Take Profit 2: **${res['tp2']:,.2f}**")
+        st.write(f"Take Profit 3: **${res['tp3']:,.2f}**")
         st.markdown("</div>", unsafe_allow_html=True)
 
     st.markdown("#### 📋 רשימת אישורי כניסה (Confluences Check)")
@@ -422,7 +469,7 @@ elif current_page == 'journal':
     if active_trades:
         for trade in active_trades:
             c_a, c_b = st.columns([3, 1])
-            c_a.write(f"**#{trade['id']} {trade['symbol']}** | כניסה: ${trade['entry']:,.2f} | סיכון: ${trade['risk_usd']:,.2f}")
+            c_a.write(f"**#{trade['id']} {trade['symbol']}** | כניסה: ${trade['entry']:,.2f} | SL: ${trade['sl']:,.2f} | TP2: ${trade['tp2']:,.2f}")
             if c_b.button("סגור ב-TP2 (+2.8R)", key=f"cl_{trade['id']}"):
                 trade['status'] = 'CLOSED'
                 trade['pnl_usd'] = trade['risk_usd'] * 2.8
