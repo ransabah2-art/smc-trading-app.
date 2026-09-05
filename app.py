@@ -29,7 +29,7 @@ def navigate_to(page_name):
     st.session_state.current_page = page_name
     st.rerun()
 
-# 3. Custom CSS - Anti-Truncation & Drill-Down Theme
+# 3. Custom CSS
 st.markdown("""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700;800&family=Plus+Jakarta+Sans:wght@300;400;600;700;800&display=swap');
@@ -64,11 +64,6 @@ st.markdown("""
         margin-bottom: 15px;
         box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
         transition: all 0.3s ease;
-    }
-
-    .drill-card:hover {
-        border-color: rgba(0, 229, 255, 0.4);
-        box-shadow: 0 6px 25px rgba(0, 229, 255, 0.1);
     }
 
     .top-status-bar {
@@ -114,43 +109,55 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# 4. Multi-Layer Data Engine (With Anti-Block Headers & Failsafe)
-@st.cache_data(ttl=15)
+# 4. Multi-Broker Real-Time Data Engine
+@st.cache_data(ttl=10)
 def fetch_klines(symbol="BTCUSDT", interval="1h", limit=120):
-    headers = {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-    }
+    # Mapping intervals for Bybit API
+    tf_map_bybit = {"15m": "15", "1h": "60", "4h": "240", "1d": "D"}
+    bybit_tf = tf_map_bybit.get(interval, "60")
     
+    headers = {'User-Agent': 'Mozilla/5.0'}
+
+    # Primary Source: Bybit Linear Futures API (High Reliability on Cloud)
     try:
-        url = f"https://fapi.binance.com/fapi/v1/klines?symbol={symbol}&interval={interval}&limit={limit}"
-        res = requests.get(url, headers=headers, timeout=4)
+        url = f"https://api.bybit.com/v5/market/kline?category=linear&symbol={symbol}&interval={bybit_tf}&limit={limit}"
+        res = requests.get(url, headers=headers, timeout=5)
         if res.status_code == 200:
             data = res.json()
-            df = pd.DataFrame(data, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume', 'close_time', 'qav', 'num_trades', 'tb_base_av', 'tb_quote_av', 'ignore'])
-            for col in ['open', 'high', 'low', 'close', 'volume']:
-                df[col] = df[col].astype(float)
-            df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
-            return df
+            if data.get('retCode') == 0 and data['result']['list']:
+                raw_list = data['result']['list']
+                # Bybit returns: [startTime, openPrice, highPrice, lowPrice, closePrice, volume, turnover]
+                df = pd.DataFrame(raw_list, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume', 'turnover'])
+                for col in ['open', 'high', 'low', 'close', 'volume']:
+                    df[col] = df[col].astype(float)
+                df['timestamp'] = pd.to_datetime(df['timestamp'].astype(float), unit='ms')
+                df = df.sort_values('timestamp').reset_index(drop=True)
+                return df, "BYBIT_LIVE"
     except Exception:
         pass
 
+    # Backup Source: CryptoCompare Public API
     try:
-        url = f"https://api.binance.com/api/v3/klines?symbol={symbol}&interval={interval}&limit={limit}"
-        res = requests.get(url, headers=headers, timeout=4)
+        tf_cc = "hour" if "h" in interval else ("minute" if "m" in interval else "day")
+        agg = int(interval.replace('h','').replace('m','')) if interval != '1d' else 1
+        url = f"https://min-api.cryptocompare.com/data/v2/histo{tf_cc}?fsym={symbol.replace('USDT','')}&tsym=USDT&limit={limit}&aggregate={agg}"
+        res = requests.get(url, headers=headers, timeout=5)
         if res.status_code == 200:
             data = res.json()
-            df = pd.DataFrame(data, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume', 'close_time', 'qav', 'num_trades', 'tb_base_av', 'tb_quote_av', 'ignore'])
+            raw_data = data['Data']['Data']
+            df = pd.DataFrame(raw_data)
+            df = df.rename(columns={'time': 'timestamp', 'volumeto': 'volume'})
+            df['timestamp'] = pd.to_datetime(df['timestamp'], unit='s')
             for col in ['open', 'high', 'low', 'close', 'volume']:
                 df[col] = df[col].astype(float)
-            df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
-            return df
+            return df, "CRYPTOCOMPARE_LIVE"
     except Exception:
         pass
 
+    # Emergency Fallback - Static Simulation
     dates = pd.date_range(end=pd.Timestamp.now(), periods=limit, freq=interval.replace('m', 'min'))
-    np.random.seed(int(pd.Timestamp.now().timestamp()) % 100000)
-    base_price = 68500.0 if "BTC" in symbol else (3550.0 if "ETH" in symbol else 145.0)
-    returns = np.random.normal(0.0001, 0.004, size=limit)
+    base_price = 95000.0 if "BTC" in symbol else (2700.0 if "ETH" in symbol else 180.0)
+    returns = np.random.normal(0.0001, 0.003, size=limit)
     price_path = base_price * np.exp(np.cumsum(returns))
     
     df = pd.DataFrame({
@@ -159,22 +166,23 @@ def fetch_klines(symbol="BTCUSDT", interval="1h", limit=120):
         'high': price_path * (1 + abs(np.random.normal(0, 0.002, limit))),
         'low': price_path * (1 - abs(np.random.normal(0, 0.002, limit))),
         'close': price_path,
-        'volume': np.random.uniform(200, 1500, limit)
+        'volume': np.random.uniform(500, 3000, limit)
     })
-    return df
+    return df, "SIMULATED"
 
 @st.cache_data(ttl=15)
 def fetch_open_interest(symbol="BTCUSDT"):
     headers = {'User-Agent': 'Mozilla/5.0'}
     try:
-        url = f"https://fapi.binance.com/fapi/v1/openInterest?symbol={symbol}"
-        res = requests.get(url, headers=headers, timeout=3)
+        url = f"https://api.bybit.com/v5/market/open-interest?category=linear&symbol={symbol}&intervalTime=5min&limit=1"
+        res = requests.get(url, headers=headers, timeout=4)
         if res.status_code == 200:
             data = res.json()
-            return float(data.get('openInterest', 0))
+            if data.get('retCode') == 0 and data['result']['list']:
+                return float(data['result']['list'][0]['openInterest'])
     except Exception:
         pass
-    return 87450.0
+    return 124500.0
 
 def analyze_smc_advanced(df, df_4h=None):
     if df is None or len(df) < 30:
@@ -187,7 +195,6 @@ def analyze_smc_advanced(df, df_4h=None):
     
     is_discount = close < eq
     prev_low = df['low'].iloc[-25:-1].min()
-    prev_high = df['high'].iloc[-25:-1].max()
     bull_sweep = df['low'].iloc[-1] < prev_low and close > prev_low
 
     htf_bias = "BULLISH" if df_4h is not None and df_4h['close'].iloc[-1] > df_4h['close'].iloc[-20] else "BEARISH"
@@ -232,22 +239,7 @@ def analyze_smc_advanced(df, df_4h=None):
         'confluences': confluences
     }
 
-# 5. Top Bar Status
-oi_val = fetch_open_interest("BTCUSDT")
-st.markdown(f"""
-<div class="top-status-bar">
-    <div style="display:flex; align-items:center;">
-        <span class="status-dot"></span>
-        <strong style="color: #00E676; font-family: 'JetBrains Mono';">INSTITUTIONAL DRILL-DOWN TERMINAL</strong>
-    </div>
-    <div style="font-family: 'JetBrains Mono'; font-size: 0.85rem; display:flex; gap:15px;">
-        <span>Open Interest (BTC): <strong class="badge-oi">{oi_val:,.0f} Contracts</strong></span>
-        <span>Equity: <strong style="color:#00E5FF;">${st.session_state.account_balance:,.2f}</strong></span>
-    </div>
-</div>
-""", unsafe_allow_html=True)
-
-# 6. Sidebar Controls
+# 5. Sidebar Controls
 st.sidebar.title("⚡ הגדרות מסחר")
 symbol = st.sidebar.selectbox("נכס", ["BTCUSDT", "ETHUSDT", "SOLUSDT", "BNBUSDT"], index=0)
 timeframe = st.sidebar.selectbox("טווח זמן (Entry)", ["15m", "1h", "4h"], index=1)
@@ -255,8 +247,25 @@ timeframe = st.sidebar.selectbox("טווח זמן (Entry)", ["15m", "1h", "4h"],
 if st.sidebar.button("🔄 רענן נתונים"):
     st.cache_data.clear()
 
-df = fetch_klines(symbol, timeframe)
-df_4h = fetch_klines(symbol, "4h")
+df, data_source = fetch_klines(symbol, timeframe)
+df_4h, _ = fetch_klines(symbol, "4h")
+oi_val = fetch_open_interest(symbol)
+
+# 6. Top Bar Status
+status_color = "#00E676" if "LIVE" in data_source else "#FFD600"
+st.markdown(f"""
+<div class="top-status-bar">
+    <div style="display:flex; align-items:center;">
+        <span class="status-dot" style="background-color:{status_color}; box-shadow: 0 0 10px {status_color};"></span>
+        <strong style="color: #00E676; font-family: 'JetBrains Mono';">INSTITUTIONAL TERMINAL</strong>
+        <span style="margin-left: 12px; font-size: 0.75rem; color: #8A99AD;">(מקור נתונים: {data_source})</span>
+    </div>
+    <div style="font-family: 'JetBrains Mono'; font-size: 0.85rem; display:flex; gap:15px;">
+        <span>Open Interest: <strong class="badge-oi">{oi_val:,.0f}</strong></span>
+        <span>Equity: <strong style="color:#00E5FF;">${st.session_state.account_balance:,.2f}</strong></span>
+    </div>
+</div>
+""", unsafe_allow_html=True)
 
 res = analyze_smc_advanced(df, df_4h)
 current_page = st.session_state.current_page
@@ -316,7 +325,6 @@ if current_page == 'main':
             marker_color=np.where(df['close'] >= df['open'], 'rgba(0, 230, 118, 0.3)', 'rgba(255, 23, 68, 0.3)')
         ), row=2, col=1)
 
-        # Highlight Levels on Chart
         fig.add_hline(y=res['entry'], line_dash="dash", line_color="#00E5FF", annotation_text="Entry", row=1, col=1)
         fig.add_hline(y=res['sl'], line_dash="solid", line_color="#FF1744", annotation_text="SL", row=1, col=1)
         fig.add_hline(y=res['tp1'], line_dash="dot", line_color="#00E676", annotation_text="TP1", row=1, col=1)
@@ -330,7 +338,6 @@ if current_page == 'main':
         st.markdown("#### 🎯 פרטי עסקה ורמות יעד")
         risk_usd = st.session_state.account_balance * 0.01
 
-        # Direct Numbers Display
         st.markdown(f"""
         <div class="trade-level-box">
             <div style="display:flex; justify-content:space-between; margin-bottom: 8px;">
@@ -338,7 +345,7 @@ if current_page == 'main':
                 <strong>{symbol}</strong>
             </div>
             <div style="display:flex; justify-content:space-between; margin-bottom: 8px;">
-                <span style="color:#8A99AD;">כניסה (Entry):</span>
+                <span style="color:#8A99AD;">מחיר לייב (Entry):</span>
                 <strong style="color:#00E5FF;">${res['entry']:,.2f}</strong>
             </div>
             <div style="display:flex; justify-content:space-between; margin-bottom: 8px;">
