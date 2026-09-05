@@ -5,57 +5,96 @@ import numpy as np
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 from datetime import datetime
+import sqlite3
 
 # 1. Page Configuration
 st.set_page_config(
-    page_title="Institutional SMC Terminal",
+    page_title="Institutional SMC Terminal v2.0",
     page_icon="⚡",
     layout="wide",
     initial_sidebar_state="collapsed"
 )
 
-# 2. Session State Initialization
+# 2. Database Initialization (SQLite Persistence)
+DB_FILE = "journal_data.db"
+
+def init_db():
+    conn = sqlite3.connect(DB_FILE)
+    c = conn.cursor()
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS trades (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            timestamp TEXT,
+            symbol TEXT,
+            direction TEXT,
+            entry REAL,
+            sl REAL,
+            tp1 REAL,
+            tp2 REAL,
+            tp3 REAL,
+            risk_usd REAL,
+            status TEXT,
+            pnl_usd REAL
+        )
+    ''')
+    conn.commit()
+    conn.close()
+
+def load_trades():
+    conn = sqlite3.connect(DB_FILE)
+    df = pd.read_sql_query("SELECT * FROM trades", conn)
+    conn.close()
+    return df.to_dict('records')
+
+def save_trade(trade):
+    conn = sqlite3.connect(DB_FILE)
+    c = conn.cursor()
+    c.execute('''
+        INSERT INTO trades (timestamp, symbol, direction, entry, sl, tp1, tp2, tp3, risk_usd, status, pnl_usd)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ''', (trade['timestamp'], trade['symbol'], trade['direction'], trade['entry'], 
+          trade['sl'], trade['tp1'], trade['tp2'], trade['tp3'], trade['risk_usd'], 
+          trade['status'], trade['pnl_usd']))
+    conn.commit()
+    conn.close()
+
+def update_trade_status(trade_id, status, pnl_usd):
+    conn = sqlite3.connect(DB_FILE)
+    c = conn.cursor()
+    c.execute('UPDATE trades SET status = ?, pnl_usd = ? WHERE id = ?', (status, pnl_usd, trade_id))
+    conn.commit()
+    conn.close()
+
+init_db()
+
+# 3. Session State
 if 'current_page' not in st.session_state:
     st.session_state.current_page = 'main'
 if 'account_balance' not in st.session_state:
     st.session_state.account_balance = 1000.0
 if 'initial_balance' not in st.session_state:
     st.session_state.initial_balance = 1000.0
-if 'trade_journal' not in st.session_state:
-    st.session_state.trade_journal = []
 
-# Navigation Helper
+st.session_state.trade_journal = load_trades()
+
 def navigate_to(page_name):
     st.session_state.current_page = page_name
     st.rerun()
 
-# 3. Mobile-Responsive Custom CSS
+# 4. Mobile-Responsive Custom CSS
 st.markdown("""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700;800&family=Plus+Jakarta+Sans:wght@300;400;600;700;800&display=swap');
     
-    html, body, [class*="css"] {
-        font-family: 'Plus Jakarta Sans', sans-serif;
-    }
-    
-    .stApp {
-        background: #06080D;
-        color: #E2E8F0;
-    }
+    html, body, [class*="css"] { font-family: 'Plus Jakarta Sans', sans-serif; }
+    .stApp { background: #06080D; color: #E2E8F0; }
 
     [data-testid="stMetricValue"] {
         font-family: 'JetBrains Mono', monospace !important;
         font-size: 1.25rem !important;
         white-space: nowrap !important;
-        text-overflow: ellipsis !important;
-        overflow: hidden !important;
     }
     
-    [data-testid="stMetricLabel"] {
-        font-size: 0.8rem !important;
-        color: #8A99AD !important;
-    }
-
     .drill-card {
         background: linear-gradient(145deg, rgba(16, 24, 38, 0.9) 0%, rgba(10, 15, 26, 0.95) 100%);
         border: 1px solid rgba(255, 255, 255, 0.08);
@@ -78,168 +117,81 @@ st.markdown("""
         gap: 10px;
     }
 
-    .top-status-left {
-        display: flex;
-        align-items: center;
-        gap: 8px;
-    }
-
-    .top-status-right {
-        display: flex;
-        align-items: center;
-        gap: 15px;
-        font-family: 'JetBrains Mono', monospace;
-        font-size: 0.85rem;
-    }
-
     .status-dot {
-        height: 10px;
-        width: 10px;
+        height: 10px; width: 10px;
         background-color: #00E676;
-        border-radius: 50%;
-        display: inline-block;
+        border-radius: 50%; display: inline-block;
         box-shadow: 0 0 8px #00E676;
-    }
-
-    .badge-oi {
-        background: rgba(0, 229, 255, 0.12);
-        color: #00E5FF;
-        border: 1px solid rgba(0, 229, 255, 0.3);
-        padding: 2px 6px;
-        border-radius: 4px;
     }
 
     .trade-level-box {
         background: rgba(255, 255, 255, 0.03);
         border: 1px solid rgba(255, 255, 255, 0.06);
         border-radius: 8px;
-        padding: 12px;
-        margin-top: 8px;
+        padding: 12px; margin-top: 8px;
         font-family: 'JetBrains Mono', monospace;
         font-size: 0.82rem;
     }
 
-    /* Mobile Responsive Tweaks */
     @media (max-width: 768px) {
-        .top-status-bar {
-            flex-direction: column;
-            align-items: flex-start;
-            gap: 6px;
-            padding: 8px 12px;
-        }
-        .top-status-right {
-            width: 100%;
-            justify-content: space-between;
-            font-size: 0.78rem;
-        }
-        .drill-card {
-            padding: 12px !important;
-            margin-bottom: 8px !important;
-        }
-        [data-testid="stMetricValue"] {
-            font-size: 1.05rem !important;
-        }
-        .stButton button {
-            padding: 10px 14px !important;
-            font-size: 0.9rem !important;
-        }
+        .top-status-bar { flex-direction: column; align-items: flex-start; gap: 6px; }
+        .drill-card { padding: 12px !important; }
     }
 </style>
 """, unsafe_allow_html=True)
 
-# 4. Multi-Exchange Real-Time Data Engine
+# 5. Data Engine
 @st.cache_data(ttl=10)
 def fetch_klines(symbol="ETHUSDT", interval="1h", limit=120):
-    headers = {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-    }
-
+    headers = {'User-Agent': 'Mozilla/5.0'}
+    
     # MEXC
     try:
         tf_mexc = {"15m": "15m", "1h": "60m", "4h": "4h"}.get(interval, "60m")
         url = f"https://api.mexc.com/api/v3/klines?symbol={symbol}&interval={tf_mexc}&limit={limit}"
-        res = requests.get(url, headers=headers, timeout=4)
-        if res.status_code == 200:
-            data = res.json()
-            if isinstance(data, list) and len(data) > 0:
-                df = pd.DataFrame(data, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume', 'close_time', 'asset_vol', 'trades', 'tb_base', 'tb_quote', 'ignore'])
-                for col in ['open', 'high', 'low', 'close', 'volume']:
-                    df[col] = df[col].astype(float)
-                df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
-                return df, "MEXC_LIVE"
-    except Exception:
-        pass
+        res = requests.get(url, headers=headers, timeout=3)
+        if res.status_code == 200 and len(res.json()) > 0:
+            df = pd.DataFrame(res.json(), columns=['timestamp', 'open', 'high', 'low', 'close', 'volume', 'ct', 'av', 'tr', 'tb', 'tq', 'ig'])
+            for col in ['open', 'high', 'low', 'close', 'volume']: df[col] = df[col].astype(float)
+            df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
+            return df, "MEXC_LIVE"
+    except Exception: pass
 
-    # Binance Vision Mirror
+    # Binance Mirror
     try:
         url = f"https://data-api.binance.vision/api/v3/klines?symbol={symbol}&interval={interval}&limit={limit}"
-        res = requests.get(url, headers=headers, timeout=4)
-        if res.status_code == 200:
-            data = res.json()
-            if isinstance(data, list) and len(data) > 0:
-                df = pd.DataFrame(data, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume', 'close_time', 'qav', 'num_trades', 'tb_base_av', 'tb_quote_av', 'ignore'])
-                for col in ['open', 'high', 'low', 'close', 'volume']:
-                    df[col] = df[col].astype(float)
-                df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
-                return df, "BINANCE_VISION_LIVE"
-    except Exception:
-        pass
+        res = requests.get(url, headers=headers, timeout=3)
+        if res.status_code == 200 and len(res.json()) > 0:
+            df = pd.DataFrame(res.json(), columns=['timestamp', 'open', 'high', 'low', 'close', 'volume', 'ct', 'qav', 'num', 'tb', 'tq', 'ig'])
+            for col in ['open', 'high', 'low', 'close', 'volume']: df[col] = df[col].astype(float)
+            df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
+            return df, "BINANCE_LIVE"
+    except Exception: pass
 
-    # Gate.io
-    try:
-        tf_gate = {"15m": "15m", "1h": "1h", "4h": "4h"}.get(interval, "1h")
-        sym_gate = symbol.replace("USDT", "_USDT")
-        url = f"https://api.gateio.ws/api/v4/spot/candlesticks?currency_pair={sym_gate}&interval={tf_gate}&limit={limit}"
-        res = requests.get(url, headers=headers, timeout=4)
-        if res.status_code == 200:
-            data = res.json()
-            if isinstance(data, list) and len(data) > 0:
-                df = pd.DataFrame(data, columns=['timestamp', 'volume', 'close', 'high', 'low', 'open'])
-                for col in ['open', 'high', 'low', 'close', 'volume']:
-                    df[col] = df[col].astype(float)
-                df['timestamp'] = pd.to_datetime(df['timestamp'].astype(float), unit='s')
-                df = df.sort_values('timestamp').reset_index(drop=True)
-                return df, "GATEIO_LIVE"
-    except Exception:
-        pass
-
-    # Emergency Fallback
+    # Fallback
     dates = pd.date_range(end=pd.Timestamp.now(), periods=limit, freq=interval.replace('m', 'min'))
     base_price = 2474.0 if "ETH" in symbol else (95000.0 if "BTC" in symbol else 135.0)
     returns = np.random.normal(0.0001, 0.003, size=limit)
     price_path = base_price * np.exp(np.cumsum(returns))
-    
-    df = pd.DataFrame({
-        'timestamp': dates,
-        'open': price_path * (1 + np.random.normal(0, 0.001, limit)),
-        'high': price_path * (1 + abs(np.random.normal(0, 0.002, limit))),
-        'low': price_path * (1 - abs(np.random.normal(0, 0.002, limit))),
-        'close': price_path,
-        'volume': np.random.uniform(500, 3000, limit)
-    })
+    df = pd.DataFrame({'timestamp': dates, 'open': price_path * 1.001, 'high': price_path * 1.002, 'low': price_path * 0.998, 'close': price_path, 'volume': np.random.uniform(500, 3000, limit)})
     return df, "FALLBACK_STATIC"
 
 @st.cache_data(ttl=15)
 def fetch_open_interest(symbol="ETHUSDT"):
-    headers = {'User-Agent': 'Mozilla/5.0'}
     try:
         url = f"https://api.bybit.com/v5/market/open-interest?category=linear&symbol={symbol}&intervalTime=5min&limit=1"
-        res = requests.get(url, headers=headers, timeout=3)
-        if res.status_code == 200:
-            data = res.json()
-            if data.get('retCode') == 0 and data['result']['list']:
-                return float(data['result']['list'][0]['openInterest'])
-    except Exception:
-        pass
+        res = requests.get(url, headers={'User-Agent': 'Mozilla/5.0'}, timeout=3)
+        if res.status_code == 200 and res.json()['result']['list']:
+            return float(res.json()['result']['list'][0]['openInterest'])
+    except Exception: pass
     return 124500.0
 
+# 6. Advanced SMC Engine + FVG / Order Block Detection
 def analyze_smc_advanced(df, df_4h=None):
-    if df is None or len(df) < 30:
-        return None
+    if df is None or len(df) < 30: return None
     
     close = df['close'].iloc[-1]
-    range_high = df['high'].iloc[-50:].max()
-    range_low = df['low'].iloc[-50:].min()
+    range_high, range_low = df['high'].iloc[-50:].max(), df['low'].iloc[-50:].min()
     eq = (range_high + range_low) / 2
     
     is_discount = close < eq
@@ -251,15 +203,23 @@ def analyze_smc_advanced(df, df_4h=None):
     score = 50
     confluences = []
     
-    if is_discount:
-        score += 15
-        confluences.append("Discount Zone (1h)")
-    if bull_sweep:
-        score += 20
-        confluences.append("Liquidity Sweep (1h)")
-    if htf_bias == "BULLISH":
-        score += 15
-        confluences.append("4h HTF Trend Alignment 🟢")
+    if is_discount: score += 15; confluences.append("Discount Zone")
+    if bull_sweep: score += 20; confluences.append("Liquidity Sweep")
+    if htf_bias == "BULLISH": score += 15; confluences.append("4h Trend Alignment")
+
+    # Detect FVG (Fair Value Gaps)
+    fvgs = []
+    for i in range(2, len(df)-1):
+        if df['low'].iloc[i] > df['high'].iloc[i-2]:  # Bullish FVG
+            fvgs.append({'type': 'BULLISH', 'top': df['low'].iloc[i], 'bottom': df['high'].iloc[i-2], 'time': df['timestamp'].iloc[i]})
+        elif df['high'].iloc[i] < df['low'].iloc[i-2]: # Bearish FVG
+            fvgs.append({'type': 'BEARISH', 'top': df['low'].iloc[i-2], 'bottom': df['high'].iloc[i], 'time': df['timestamp'].iloc[i]})
+
+    # Detect Order Blocks
+    obs = []
+    for i in range(10, len(df)-2):
+        if df['close'].iloc[i] < df['open'].iloc[i] and df['close'].iloc[i+1] > df['high'].iloc[i]:
+            obs.append({'type': 'BULL_OB', 'high': df['high'].iloc[i], 'low': df['low'].iloc[i], 'time': df['timestamp'].iloc[i]})
 
     direction = "BUY (LONG) 🟢" if score >= 65 else "NEUTRAL ⏳"
 
@@ -275,53 +235,44 @@ def analyze_smc_advanced(df, df_4h=None):
     rr = round(abs(tp2 - close) / max(abs(close - sl), 1e-6), 2)
 
     return {
-        'direction': direction,
-        'is_confirmed': score >= 65,
-        'entry': close,
-        'sl': sl,
-        'tp1': tp1,
-        'tp2': tp2,
-        'tp3': tp3,
-        'rr': rr,
-        'score': score,
-        'htf_bias': htf_bias,
-        'confluences': confluences
+        'direction': direction, 'is_confirmed': score >= 65, 'entry': close,
+        'sl': sl, 'tp1': tp1, 'tp2': tp2, 'tp3': tp3, 'rr': rr, 'score': score,
+        'htf_bias': htf_bias, 'confluences': confluences, 'fvgs': fvgs[-3:], 'obs': obs[-2:]
     }
 
-# 5. Sidebar Controls
+# 7. Sidebar Controls
 st.sidebar.title("⚡ הגדרות מסחר")
-symbol = st.sidebar.selectbox("נכס", ["ETHUSDT", "BTCUSDT", "SOLUSDT", "BNBUSDT"], index=0)
-timeframe = st.sidebar.selectbox("טווח זמן (Entry)", ["15m", "1h", "4h"], index=1)
+symbol = st.sidebar.selectbox("נכס ראשי", ["ETHUSDT", "BTCUSDT", "SOLUSDT", "BNBUSDT", "XRPUSDT", "ADAUSDT"], index=0)
+timeframe = st.sidebar.selectbox("טווח זמן", ["15m", "1h", "4h"], index=1)
 
-if st.sidebar.button("🔄 רענן נתונים בלייב"):
+if st.sidebar.button("🔄 רענן נתונים"):
     st.cache_data.clear()
     st.rerun()
 
 df, data_source = fetch_klines(symbol, timeframe)
 df_4h, _ = fetch_klines(symbol, "4h")
 oi_val = fetch_open_interest(symbol)
+res = analyze_smc_advanced(df, df_4h)
 
-# 6. Top Bar Status (Mobile Friendly)
+# Top Bar
 status_color = "#00E676" if "LIVE" in data_source else "#FFD600"
 st.markdown(f"""
 <div class="top-status-bar">
-    <div class="top-status-left">
+    <div>
         <span class="status-dot" style="background-color:{status_color};"></span>
-        <strong style="color: #00E676; font-family: 'JetBrains Mono'; font-size: 0.9rem;">INSTITUTIONAL TERMINAL</strong>
-        <span style="color: #00E5FF; font-weight: bold; font-size: 0.75rem;">[{data_source}]</span>
+        <strong style="color: #00E676; font-family: 'JetBrains Mono';">INSTITUTIONAL TERMINAL v2.0</strong>
+        <span style="color: #00E5FF; font-size: 0.75rem;"> [{data_source}]</span>
     </div>
-    <div class="top-status-right">
-        <span>OI: <strong class="badge-oi">{oi_val:,.0f}</strong></span>
-        <span>Equity: <strong style="color:#00E5FF;">${st.session_state.account_balance:,.2f}</strong></span>
+    <div style="font-family: 'JetBrains Mono'; font-size: 0.85rem;">
+        OI: <strong style="color:#00E5FF;">{oi_val:,.0f}</strong> | Equity: <strong style="color:#00E676;">${st.session_state.account_balance:,.2f}</strong>
     </div>
 </div>
 """, unsafe_allow_html=True)
 
-res = analyze_smc_advanced(df, df_4h)
 current_page = st.session_state.current_page
 
 # =========================================================================
-# PAGE 1: MAIN EXECUTIVE DASHBOARD
+# PAGE 1: MAIN EXECUTIVE DASHBOARD + SCREENER
 # =========================================================================
 if current_page == 'main':
     closed_trades = [t for t in st.session_state.trade_journal if t['status'] == 'CLOSED']
@@ -330,34 +281,46 @@ if current_page == 'main':
     win_rate = (wins / len(closed_trades) * 100) if closed_trades else 0.0
 
     c1, c2, c3, c4 = st.columns(4)
-
     with c1:
         st.markdown("<div class='drill-card'>", unsafe_allow_html=True)
         st.metric("שווי תיק ו-PnL", f"${st.session_state.account_balance:,.2f}", f"{total_pnl:+,.2f}$")
-        if st.button("ביצועים ➔", key="btn_perf", use_container_width=True):
-            navigate_to('performance')
+        if st.button("ביצועים ➔", key="btn_perf", use_container_width=True): navigate_to('performance')
         st.markdown("</div>", unsafe_allow_html=True)
 
     with c2:
         st.markdown("<div class='drill-card'>", unsafe_allow_html=True)
         st.metric("אחוז הצלחה", f"{win_rate:.0f}%", f"{wins}/{len(closed_trades)} עסקאות")
-        if st.button("יומן מלא ➔", key="btn_journal", use_container_width=True):
-            navigate_to('journal')
+        if st.button("יומן מלא ➔", key="btn_journal", use_container_width=True): navigate_to('journal')
         st.markdown("</div>", unsafe_allow_html=True)
 
     with c3:
         st.markdown("<div class='drill-card'>", unsafe_allow_html=True)
         st.metric("איתות SMC", res['direction'], f"ציון: {res['score']}/100")
-        if st.button("Order Flow ➔", key="btn_sig", use_container_width=True):
-            navigate_to('signal_details')
+        if st.button("Order Flow ➔", key="btn_sig", use_container_width=True): navigate_to('signal_details')
         st.markdown("</div>", unsafe_allow_html=True)
 
     with c4:
         st.markdown("<div class='drill-card'>", unsafe_allow_html=True)
         st.metric("מחשבון סיכון", "1.0% Risk", f"HTF: {res['htf_bias']}")
-        if st.button("סימולטור ➔", key="btn_risk", use_container_width=True):
-            navigate_to('risk_details')
+        if st.button("סימולטור ➔", key="btn_risk", use_container_width=True): navigate_to('risk_details')
         st.markdown("</div>", unsafe_allow_html=True)
+
+    # Market Screener Section
+    with st.expander("🔍 סורק שוק אוטומטי (SMC Multi-Asset Screener)", expanded=False):
+        screener_symbols = ["ETHUSDT", "BTCUSDT", "SOLUSDT", "BNBUSDT", "XRPUSDT", "ADAUSDT"]
+        screener_data = []
+        for sym in screener_symbols:
+            s_df, _ = fetch_klines(sym, "1h", 60)
+            s_res = analyze_smc_advanced(s_df)
+            if s_res:
+                screener_data.append({
+                    "נכס": sym,
+                    "מחיר": f"${s_res['entry']:,.2f}",
+                    "כיוון": s_res['direction'],
+                    "ציון SMC": f"{s_res['score']}/100",
+                    "מגמת HTF": s_res['htf_bias']
+                })
+        st.dataframe(pd.DataFrame(screener_data), use_container_width=True)
 
     col_chart, col_quick_trade = st.columns([2.5, 1.5])
 
@@ -368,6 +331,15 @@ if current_page == 'main':
             increasing_line_color='#00E676', decreasing_line_color='#FF1744'
         ), row=1, col=1)
 
+        # Plot Order Blocks (OB)
+        for ob in res['obs']:
+            fig.add_hrect(y0=ob['low'], y1=ob['high'], fillcolor="rgba(0, 229, 255, 0.15)", line_width=1, line_color="#00E5FF", row=1, col=1)
+
+        # Plot FVGs
+        for fvg in res['fvgs']:
+            color = "rgba(0, 230, 118, 0.2)" if fvg['type'] == 'BULLISH' else "rgba(255, 23, 68, 0.2)"
+            fig.add_hrect(y0=fvg['bottom'], y1=fvg['top'], fillcolor=color, line_width=0, row=1, col=1)
+
         fig.add_trace(go.Bar(
             x=df['timestamp'], y=df['volume'],
             marker_color=np.where(df['close'] >= df['open'], 'rgba(0, 230, 118, 0.3)', 'rgba(255, 23, 68, 0.3)')
@@ -377,14 +349,7 @@ if current_page == 'main':
         fig.add_hline(y=res['sl'], line_dash="solid", line_color="#FF1744", annotation_text="SL", row=1, col=1)
         fig.add_hline(y=res['tp1'], line_dash="dot", line_color="#00E676", annotation_text="TP1", row=1, col=1)
 
-        fig.update_layout(
-            template="plotly_dark",
-            paper_bgcolor='rgba(0,0,0,0)',
-            plot_bgcolor='rgba(0,0,0,0)',
-            height=420,
-            showlegend=False,
-            margin=dict(l=5, r=5, t=5, b=5)
-        )
+        fig.update_layout(template="plotly_dark", paper_bgcolor='rgba(0,0,0,0)', height=420, showlegend=False, margin=dict(l=5, r=5, t=5, b=5))
         st.plotly_chart(fig, use_container_width=True)
 
     with col_quick_trade:
@@ -394,180 +359,64 @@ if current_page == 'main':
 
         st.markdown(f"""
         <div class="trade-level-box">
-            <div style="display:flex; justify-content:space-between; margin-bottom: 6px;">
-                <span style="color:#8A99AD;">נכס:</span>
-                <strong>{symbol}</strong>
-            </div>
-            <div style="display:flex; justify-content:space-between; margin-bottom: 6px;">
-                <span style="color:#8A99AD;">מחיר בלייב:</span>
-                <strong style="color:#00E5FF;">${res['entry']:,.2f}</strong>
-            </div>
-            <div style="display:flex; justify-content:space-between; margin-bottom: 6px;">
-                <span style="color:#8A99AD;">סטופ לוס (SL):</span>
-                <strong style="color:#FF1744;">${res['sl']:,.2f}</strong>
-            </div>
+            <div style="display:flex; justify-content:space-between;"><span>נכס:</span><strong>{symbol}</strong></div>
+            <div style="display:flex; justify-content:space-between;"><span>כניסה:</span><strong style="color:#00E5FF;">${res['entry']:,.2f}</strong></div>
+            <div style="display:flex; justify-content:space-between;"><span>סטופ לוס:</span><strong style="color:#FF1744;">${res['sl']:,.2f}</strong></div>
             <hr style="border-color: rgba(255,255,255,0.08); margin: 6px 0;">
-            <div style="display:flex; justify-content:space-between; margin-bottom: 4px;">
-                <span style="color:#8A99AD;">יעד 1 (TP1 - 1.5R):</span>
-                <strong style="color:#00E676;">${res['tp1']:,.2f}</strong>
-            </div>
-            <div style="display:flex; justify-content:space-between; margin-bottom: 4px;">
-                <span style="color:#8A99AD;">יעד 2 (TP2 - 2.8R):</span>
-                <strong style="color:#00E676;">${res['tp2']:,.2f}</strong>
-            </div>
-            <div style="display:flex; justify-content:space-between; margin-bottom: 6px;">
-                <span style="color:#8A99AD;">יעד 3 (TP3 - 4.5R):</span>
-                <strong style="color:#00E676;">${res['tp3']:,.2f}</strong>
-            </div>
-            <hr style="border-color: rgba(255,255,255,0.08); margin: 6px 0;">
-            <div style="display:flex; justify-content:space-between;">
-                <span style="color:#8A99AD;">יחס R:R:</span>
-                <strong style="color:#00E5FF;">1:{res['rr']}</strong>
-            </div>
+            <div style="display:flex; justify-content:space-between;"><span>יעד 1 (TP1):</span><strong style="color:#00E676;">${res['tp1']:,.2f}</strong></div>
+            <div style="display:flex; justify-content:space-between;"><span>יעד 2 (TP2):</span><strong style="color:#00E676;">${res['tp2']:,.2f}</strong></div>
+            <div style="display:flex; justify-content:space-between;"><span>יחס R:R:</span><strong style="color:#00E5FF;">1:{res['rr']}</strong></div>
         </div>
         """, unsafe_allow_html=True)
         
         st.markdown("<br>", unsafe_allow_html=True)
         if res['is_confirmed']:
-            if st.button("🚀 כניסה לעסקה (1% הסיכון)", type="primary", use_container_width=True):
-                st.session_state.trade_journal.append({
-                    'id': len(st.session_state.trade_journal) + 1,
+            if st.button("🚀 כניסה לעסקה (שמירה ב-DB)", type="primary", use_container_width=True):
+                trade = {
                     'timestamp': datetime.now().strftime("%d/%m %H:%M"),
-                    'symbol': symbol,
-                    'direction': res['direction'],
-                    'entry': res['entry'],
-                    'sl': res['sl'],
-                    'tp1': res['tp1'],
-                    'tp2': res['tp2'],
-                    'tp3': res['tp3'],
-                    'risk_usd': risk_usd,
-                    'status': 'ACTIVE',
-                    'pnl_usd': 0.0
-                })
-                st.success("העסקה נכנסה ליומן!")
+                    'symbol': symbol, 'direction': res['direction'], 'entry': res['entry'],
+                    'sl': res['sl'], 'tp1': res['tp1'], 'tp2': res['tp2'], 'tp3': res['tp3'],
+                    'risk_usd': risk_usd, 'status': 'ACTIVE', 'pnl_usd': 0.0
+                }
+                save_trade(trade)
+                st.session_state.trade_journal = load_trades()
+                st.success("העסקה נרשמה ב-SQLite!")
                 st.rerun()
         else:
             st.button("ממתין לאישור איתות SMC...", disabled=True, use_container_width=True)
         st.markdown("</div>", unsafe_allow_html=True)
 
 # =========================================================================
-# PAGE 2: PERFORMANCE ANALYTICS
+# OTHER PAGES
 # =========================================================================
 elif current_page == 'performance':
-    if st.button("🔙 חזרה לטרמינל"):
-        navigate_to('main')
-        
-    st.markdown("### 📊 אנליטיקת ביצועים")
-    st.markdown("<hr>", unsafe_allow_html=True)
-
-    p1, p2, p3 = st.columns(3)
+    if st.button("🔙 חזרה לטרמינל"): navigate_to('main')
+    st.markdown("### 📊 אנליטיקת ביצועים (מתוך SQLite DB)")
     closed_trades = [t for t in st.session_state.trade_journal if t['status'] == 'CLOSED']
-    total_pnl = sum([t['pnl_usd'] for t in closed_trades])
-    
-    p1.metric("יתרת חשבון", f"${st.session_state.account_balance:,.2f}")
-    p2.metric("רווח/הפסד", f"${total_pnl:+,.2f}")
-    p3.metric("Profit Factor", "2.14" if closed_trades else "0.0")
+    st.dataframe(pd.DataFrame(st.session_state.trade_journal), use_container_width=True)
 
-    st.markdown("#### עקומת התפתחות התיק (Equity Curve)")
-    equity_data = [st.session_state.initial_balance]
-    curr = st.session_state.initial_balance
-    for t in closed_trades:
-        curr += t['pnl_usd']
-        equity_data.append(curr)
-
-    fig_eq = go.Figure()
-    fig_eq.add_trace(go.Scatter(y=equity_data, mode='lines+markers', line=dict(color='#00E5FF', width=3)))
-    fig_eq.update_layout(template="plotly_dark", paper_bgcolor='rgba(0,0,0,0)', height=320, margin=dict(l=10, r=10, t=10, b=10))
-    st.plotly_chart(fig_eq, use_container_width=True)
-
-# =========================================================================
-# PAGE 3: ORDER FLOW & SMC DETAILS
-# =========================================================================
 elif current_page == 'signal_details':
-    if st.button("🔙 חזרה לטרמינל"):
-        navigate_to('main')
+    if st.button("🔙 חזרה לטרמינל"): navigate_to('main')
+    st.markdown("### 🔬 פירוט FVG ו-Order Blocks")
+    st.write("Order Blocks פעילים:", res['obs'])
+    st.write("Fair Value Gaps שנמצאו:", res['fvgs'])
 
-    st.markdown("### 🔬 ניתוח Order Flow & SMC")
-    st.markdown("<hr>", unsafe_allow_html=True)
-
-    d1, d2 = st.columns(2)
-
-    with d1:
-        st.markdown("<div class='drill-card'>", unsafe_allow_html=True)
-        st.markdown("#### 🌊 Open Interest בלייב")
-        st.write(f"חוזי פיוצ'רס פעילים ב-{symbol}: **{oi_val:,.0f}**")
-        st.caption("עלייה ב-Open Interest במקביל לפריצת מחיר מאשרת כניסת מוסדיים.")
-        st.markdown("</div>", unsafe_allow_html=True)
-
-    with d2:
-        st.markdown("<div class='drill-card'>", unsafe_allow_html=True)
-        st.markdown("#### 🎯 פירוט רמות יעד")
-        st.write(f"מחיר כניסה: **${res['entry']:,.2f}**")
-        st.write(f"סטופ לוס: **${res['sl']:,.2f}**")
-        st.write(f"Take Profit 1: **${res['tp1']:,.2f}**")
-        st.write(f"Take Profit 2: **${res['tp2']:,.2f}**")
-        st.write(f"Take Profit 3: **${res['tp3']:,.2f}**")
-        st.markdown("</div>", unsafe_allow_html=True)
-
-    st.markdown("#### 📋 אישורי כניסה (Confluences Check)")
-    for c in res['confluences']:
-        st.success(f"✓ {c}")
-
-# =========================================================================
-# PAGE 4: TRADE JOURNAL
-# =========================================================================
 elif current_page == 'journal':
-    if st.button("🔙 חזרה לטרמינל"):
-        navigate_to('main')
-
-    st.markdown("### 📖 יומן עסקאות")
-    st.markdown("<hr>", unsafe_allow_html=True)
-
-    active_trades = [t for t in st.session_state.trade_journal if t['status'] == 'ACTIVE']
-    closed_trades = [t for t in st.session_state.trade_journal if t['status'] == 'CLOSED']
-
-    st.markdown("#### עסקאות פעילות")
-    if active_trades:
-        for trade in active_trades:
-            c_a, c_b = st.columns([3, 1])
-            c_a.write(f"**#{trade['id']} {trade['symbol']}** | כניסה: ${trade['entry']:,.2f} | SL: ${trade['sl']:,.2f}")
-            if c_b.button("סגור ב-TP2 (+2.8R)", key=f"cl_{trade['id']}"):
-                trade['status'] = 'CLOSED'
-                trade['pnl_usd'] = trade['risk_usd'] * 2.8
-                st.session_state.account_balance += trade['pnl_usd']
+    if st.button("🔙 חזרה לטרמינל"): navigate_to('main')
+    st.markdown("### 📖 יומן עסקאות קבוע")
+    trades = st.session_state.trade_journal
+    for t in trades:
+        if t['status'] == 'ACTIVE':
+            col1, col2 = st.columns([3, 1])
+            col1.write(f"#{t['id']} {t['symbol']} | Entry: ${t['entry']:,.2f}")
+            if col2.button("סגור ב-TP2", key=f"close_{t['id']}"):
+                pnl = t['risk_usd'] * 2.8
+                update_trade_status(t['id'], 'CLOSED', pnl)
+                st.session_state.account_balance += pnl
+                st.session_state.trade_journal = load_trades()
                 st.rerun()
-    else:
-        st.caption("אין עסקאות פעילות.")
+    st.dataframe(pd.DataFrame(trades), use_container_width=True)
 
-    st.markdown("---")
-    st.markdown("#### היסטוריית עסקאות סגורות")
-    if closed_trades:
-        st.dataframe(pd.DataFrame(closed_trades), use_container_width=True)
-    else:
-        st.caption("טרם נרשמו עסקאות סגורות.")
-
-# =========================================================================
-# PAGE 5: RISK SIMULATOR
-# =========================================================================
 elif current_page == 'risk_details':
-    if st.button("🔙 חזרה לטרמינל"):
-        navigate_to('main')
-
+    if st.button("🔙 חזרה לטרמינל"): navigate_to('main')
     st.markdown("### 🧮 סימולטור ניהול סיכונים")
-    st.markdown("<hr>", unsafe_allow_html=True)
-
-    sim_risk = st.slider("אחוז סיכון (%):", 0.25, 5.0, 1.0, 0.25)
-    sim_lev = st.number_input("מינוף:", 1, 125, 10)
-
-    risk_usd = st.session_state.account_balance * (sim_risk / 100.0)
-    pos_usd = risk_usd / 0.01
-    margin = pos_usd / sim_lev
-
-    st.markdown(f"""
-    <div class='drill-card'>
-        <h4>תוצאות סימולציה:</h4>
-        • סיכון כספי: <strong style="color:#FF1744;">${risk_usd:,.2f}</strong><br>
-        • גודל פוזיציה: <strong style="color:#00E5FF;">${pos_usd:,.2f}</strong><br>
-        • בטחונות (Margin): <strong style="color:#00E676;">${margin:,.2f}</strong>
-    </div>
-    """, unsafe_allow_html=True)
