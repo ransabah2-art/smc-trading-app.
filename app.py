@@ -81,20 +81,14 @@ def navigate_to(page_name):
     st.session_state.current_page = page_name
     st.rerun()
 
-# 4. Mobile-Responsive & RTL Fixed CSS
+# 4. Custom CSS
 st.markdown("""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700;800&family=Plus+Jakarta+Sans:wght@300;400;600;700;800&display=swap');
     
-    html, body, [class*="css"] { 
-        font-family: 'Plus Jakarta Sans', sans-serif;
-    }
-    .stApp { 
-        background: #06080D; 
-        color: #E2E8F0; 
-    }
+    html, body, [class*="css"] { font-family: 'Plus Jakarta Sans', sans-serif; }
+    .stApp { background: #06080D; color: #E2E8F0; }
 
-    /* תיקון עיצוב הכרטיסיות והכותרות */
     [data-testid="stMetric"] {
         background: linear-gradient(145deg, rgba(16, 24, 38, 0.9) 0%, rgba(10, 15, 26, 0.95) 100%);
         border: 1px solid rgba(255, 255, 255, 0.08);
@@ -110,7 +104,6 @@ st.markdown("""
         color: #94A3B8 !important;
         direction: rtl !important;
         text-align: right !important;
-        justify-content: flex-start !important;
     }
     
     [data-testid="stMetricValue"] {
@@ -121,9 +114,7 @@ st.markdown("""
         text-align: right !important;
     }
 
-    [data-testid="stMetricDelta"] {
-        direction: ltr !important;
-    }
+    [data-testid="stMetricDelta"] { direction: ltr !important; }
 
     .top-status-bar {
         background: rgba(14, 20, 32, 0.95);
@@ -155,19 +146,13 @@ st.markdown("""
         font-size: 0.82rem;
         direction: rtl;
     }
-
-    @media (max-width: 768px) {
-        .top-status-bar { flex-direction: column; align-items: flex-start; gap: 6px; }
-    }
 </style>
 """, unsafe_allow_html=True)
 
-# 5. Data Engine
+# 5. Data Engine (Klines, Open Interest, Order Flow Metrics)
 @st.cache_data(ttl=10)
 def fetch_klines(symbol="ETHUSDT", interval="1h", limit=120):
     headers = {'User-Agent': 'Mozilla/5.0'}
-    
-    # MEXC
     try:
         tf_mexc = {"15m": "15m", "1h": "60m", "4h": "4h"}.get(interval, "60m")
         url = f"https://api.mexc.com/api/v3/klines?symbol={symbol}&interval={tf_mexc}&limit={limit}"
@@ -179,7 +164,6 @@ def fetch_klines(symbol="ETHUSDT", interval="1h", limit=120):
             return df, "MEXC_LIVE"
     except Exception: pass
 
-    # Binance Mirror
     try:
         url = f"https://data-api.binance.vision/api/v3/klines?symbol={symbol}&interval={interval}&limit={limit}"
         res = requests.get(url, headers=headers, timeout=3)
@@ -190,7 +174,6 @@ def fetch_klines(symbol="ETHUSDT", interval="1h", limit=120):
             return df, "BINANCE_LIVE"
     except Exception: pass
 
-    # Fallback
     dates = pd.date_range(end=pd.Timestamp.now(), periods=limit, freq=interval.replace('m', 'min'))
     base_price = 2474.0 if "ETH" in symbol else (79000.0 if "BTC" in symbol else 103.0)
     returns = np.random.normal(0.0001, 0.003, size=limit)
@@ -199,17 +182,32 @@ def fetch_klines(symbol="ETHUSDT", interval="1h", limit=120):
     return df, "FALLBACK_STATIC"
 
 @st.cache_data(ttl=15)
-def fetch_open_interest(symbol="ETHUSDT"):
+def fetch_order_flow_metrics(symbol="ETHUSDT"):
+    oi_val = 124500.0
+    funding_rate = 0.01
+    long_short_ratio = 1.15
     try:
-        url = f"https://api.bybit.com/v5/market/open-interest?category=linear&symbol={symbol}&intervalTime=5min&limit=1"
-        res = requests.get(url, headers={'User-Agent': 'Mozilla/5.0'}, timeout=3)
-        if res.status_code == 200 and res.json()['result']['list']:
-            return float(res.json()['result']['list'][0]['openInterest'])
-    except Exception: pass
-    return 124500.0
+        url_oi = f"https://api.bybit.com/v5/market/open-interest?category=linear&symbol={symbol}&intervalTime=5min&limit=1"
+        res_oi = requests.get(url_oi, headers={'User-Agent': 'Mozilla/5.0'}, timeout=2)
+        if res_oi.status_code == 200 and res_oi.json()['result']['list']:
+            oi_val = float(res_oi.json()['result']['list'][0]['openInterest'])
+            
+        url_ticker = f"https://api.bybit.com/v5/market/tickers?category=linear&symbol={symbol}"
+        res_t = requests.get(url_ticker, headers={'User-Agent': 'Mozilla/5.0'}, timeout=2)
+        if res_t.status_code == 200 and res_t.json()['result']['list']:
+            funding_rate = float(res_t.json()['result']['list'][0].get('fundingRate', 0.0001)) * 100
 
-# 6. Advanced SMC Engine + FVG / Order Block Detection
-def analyze_smc_advanced(df, df_4h=None):
+        url_ls = f"https://api.bybit.com/v5/market/account-ratio?category=linear&symbol={symbol}&period=5m&limit=1"
+        res_ls = requests.get(url_ls, headers={'User-Agent': 'Mozilla/5.0'}, timeout=2)
+        if res_ls.status_code == 200 and res_ls.json()['result']['list']:
+            ls_item = res_ls.json()['result']['list'][0]
+            long_short_ratio = round(float(ls_item['buyRatio']) / max(float(ls_item['sellRatio']), 0.01), 2)
+    except Exception: pass
+    
+    return oi_val, funding_rate, long_short_ratio
+
+# 6. Advanced SMC Engine + FVG / OB / CVD Divergence
+def analyze_smc_advanced(df, df_4h=None, funding_rate=0.01, ls_ratio=1.15):
     if df is None or len(df) < 30: return None
     
     close = df['close'].iloc[-1]
@@ -219,17 +217,22 @@ def analyze_smc_advanced(df, df_4h=None):
     is_discount = close < eq
     prev_low = df['low'].iloc[-25:-1].min()
     bull_sweep = df['low'].iloc[-1] < prev_low and close > prev_low
-
     htf_bias = "BULLISH" if df_4h is not None and df_4h['close'].iloc[-1] > df_4h['close'].iloc[-20] else "BEARISH"
+
+    # Calculate Cumulative Volume Delta (CVD) Approximation
+    delta = np.where(df['close'] >= df['open'], df['volume'] * 0.6, -df['volume'] * 0.6)
+    cvd = np.cumsum(delta)
+    cvd_trend = "BULLISH" if cvd[-1] > cvd[-10] else "BEARISH"
 
     score = 50
     confluences = []
     
-    if is_discount: score += 15; confluences.append("Discount Zone")
-    if bull_sweep: score += 20; confluences.append("Liquidity Sweep")
-    if htf_bias == "BULLISH": score += 15; confluences.append("4h Trend Alignment")
+    if is_discount: score += 10; confluences.append("Discount Zone")
+    if bull_sweep: score += 15; confluences.append("Liquidity Sweep")
+    if htf_bias == "BULLISH": score += 15; confluences.append("4h HTF Bias")
+    if cvd_trend == "BULLISH": score += 10; confluences.append("CVD Volume Delta Alignment")
+    if ls_ratio < 1.0: score += 10; confluences.append("Institutional Short-Squeeze Setup")
 
-    # Detect FVG (Fair Value Gaps)
     fvgs = []
     for i in range(2, len(df)-1):
         if df['low'].iloc[i] > df['high'].iloc[i-2]: 
@@ -237,7 +240,6 @@ def analyze_smc_advanced(df, df_4h=None):
         elif df['high'].iloc[i] < df['low'].iloc[i-2]:
             fvgs.append({'type': 'BEARISH', 'top': df['low'].iloc[i-2], 'bottom': df['high'].iloc[i], 'time': df['timestamp'].iloc[i]})
 
-    # Detect Order Blocks
     obs = []
     for i in range(10, len(df)-2):
         if df['close'].iloc[i] < df['open'].iloc[i] and df['close'].iloc[i+1] > df['high'].iloc[i]:
@@ -259,7 +261,8 @@ def analyze_smc_advanced(df, df_4h=None):
     return {
         'direction': direction, 'is_confirmed': score >= 65, 'entry': close,
         'sl': sl, 'tp1': tp1, 'tp2': tp2, 'tp3': tp3, 'rr': rr, 'score': score,
-        'htf_bias': htf_bias, 'confluences': confluences, 'fvgs': fvgs[-3:], 'obs': obs[-2:]
+        'htf_bias': htf_bias, 'confluences': confluences, 'fvgs': fvgs[-3:], 'obs': obs[-2:],
+        'cvd': cvd, 'cvd_trend': cvd_trend
     }
 
 # 7. Sidebar Controls
@@ -273,8 +276,8 @@ if st.sidebar.button("🔄 רענן נתונים"):
 
 df, data_source = fetch_klines(symbol, timeframe)
 df_4h, _ = fetch_klines(symbol, "4h")
-oi_val = fetch_open_interest(symbol)
-res = analyze_smc_advanced(df, df_4h)
+oi_val, funding_rate, ls_ratio = fetch_order_flow_metrics(symbol)
+res = analyze_smc_advanced(df, df_4h, funding_rate, ls_ratio)
 
 # Top Bar
 status_color = "#00E676" if "LIVE" in data_source else "#FFD600"
@@ -285,8 +288,11 @@ st.markdown(f"""
         <strong style="color: #00E676; font-family: 'JetBrains Mono';">INSTITUTIONAL TERMINAL v2.0</strong>
         <span style="color: #00E5FF; font-size: 0.75rem;"> [{data_source}]</span>
     </div>
-    <div style="font-family: 'JetBrains Mono'; font-size: 0.85rem;">
-        OI: <strong style="color:#00E5FF;">{oi_val:,.0f}</strong> | Equity: <strong style="color:#00E676;">${st.session_state.account_balance:,.2f}</strong>
+    <div style="font-family: 'JetBrains Mono'; font-size: 0.82rem;">
+        Funding: <strong style="color:{'#00E676' if funding_rate <= 0.01 else '#FF1744'};">{funding_rate:+.4f}%</strong> | 
+        L/S Ratio: <strong style="color:#00E5FF;">{ls_ratio:.2f}</strong> | 
+        OI: <strong style="color:#00E5FF;">{oi_val:,.0f}</strong> | 
+        Equity: <strong style="color:#00E676;">${st.session_state.account_balance:,.2f}</strong>
     </div>
 </div>
 """, unsafe_allow_html=True)
@@ -321,7 +327,6 @@ if current_page == 'main':
 
     st.markdown("<br>", unsafe_allow_html=True)
 
-    # Market Screener Section
     with st.expander("🔍 סורק שוק אוטומטי (SMC Multi-Asset Screener)", expanded=False):
         screener_symbols = ["ETHUSDT", "BTCUSDT", "SOLUSDT", "BNBUSDT", "XRPUSDT", "ADAUSDT"]
         screener_data = []
@@ -341,7 +346,9 @@ if current_page == 'main':
     col_chart, col_quick_trade = st.columns([2.5, 1.5])
 
     with col_chart:
-        fig = make_subplots(rows=2, cols=1, shared_xaxes=True, vertical_spacing=0.03, row_heights=[0.8, 0.2])
+        fig = make_subplots(rows=3, cols=1, shared_xaxes=True, vertical_spacing=0.03, row_heights=[0.6, 0.2, 0.2])
+        
+        # Candles & SMC Zones
         fig.add_trace(go.Candlestick(
             x=df['timestamp'], open=df['open'], high=df['high'], low=df['low'], close=df['close'],
             increasing_line_color='#00E676', decreasing_line_color='#FF1744'
@@ -354,16 +361,22 @@ if current_page == 'main':
             color = "rgba(0, 230, 118, 0.2)" if fvg['type'] == 'BULLISH' else "rgba(255, 23, 68, 0.2)"
             fig.add_hrect(y0=fvg['bottom'], y1=fvg['top'], fillcolor=color, line_width=0, row=1, col=1)
 
-        fig.add_trace(go.Bar(
-            x=df['timestamp'], y=df['volume'],
-            marker_color=np.where(df['close'] >= df['open'], 'rgba(0, 230, 118, 0.3)', 'rgba(255, 23, 68, 0.3)')
-        ), row=2, col=1)
-
         fig.add_hline(y=res['entry'], line_dash="dash", line_color="#00E5FF", annotation_text="Entry", row=1, col=1)
         fig.add_hline(y=res['sl'], line_dash="solid", line_color="#FF1744", annotation_text="SL", row=1, col=1)
         fig.add_hline(y=res['tp1'], line_dash="dot", line_color="#00E676", annotation_text="TP1", row=1, col=1)
 
-        fig.update_layout(template="plotly_dark", paper_bgcolor='rgba(0,0,0,0)', height=420, showlegend=False, margin=dict(l=5, r=5, t=5, b=5))
+        # Volume
+        fig.add_trace(go.Bar(
+            x=df['timestamp'], y=df['volume'],
+            marker_color=np.where(df['close'] >= df['open'], 'rgba(0, 230, 118, 0.4)', 'rgba(255, 23, 68, 0.4)')
+        ), row=2, col=1)
+
+        # CVD Indicator Line
+        fig.add_trace(go.Scatter(
+            x=df['timestamp'], y=res['cvd'], line=dict(color='#00E5FF', width=2), name="CVD Volume Delta"
+        ), row=3, col=1)
+
+        fig.update_layout(template="plotly_dark", paper_bgcolor='rgba(0,0,0,0)', height=480, showlegend=False, margin=dict(l=5, r=5, t=5, b=5))
         st.plotly_chart(fig, use_container_width=True)
 
     with col_quick_trade:
@@ -399,22 +412,63 @@ if current_page == 'main':
             st.button("ממתין לאישור איתות SMC...", disabled=True, use_container_width=True)
 
 # =========================================================================
-# OTHER PAGES
+# PAGE 2: INSTITUTIONAL PERFORMANCE ANALYTICS
 # =========================================================================
 elif current_page == 'performance':
     if st.button("🔙 חזרה לטרמינל"): navigate_to('main')
-    st.markdown("### 📊 אנליטיקת ביצועים (מתוך SQLite DB)")
-    st.dataframe(pd.DataFrame(st.session_state.trade_journal), use_container_width=True)
+    st.markdown("### 📊 אנליטיקת ביצועים מוסדית (SQLite Analytics)")
+    
+    trades = st.session_state.trade_journal
+    closed_trades = [t for t in trades if t['status'] == 'CLOSED']
+    
+    if not closed_trades:
+        st.info("אין עדיין עסקאות סגורות בבסיס הנתונים לצורך חישוב מטריצות ביצועים.")
+    else:
+        df_p = pd.DataFrame(closed_trades)
+        df_p['pnl_usd'] = df_p['pnl_usd'].astype(float)
+        
+        gross_profit = df_p[df_p['pnl_usd'] > 0]['pnl_usd'].sum()
+        gross_loss = abs(df_p[df_p['pnl_usd'] < 0]['pnl_usd'].sum())
+        profit_factor = round(gross_profit / max(gross_loss, 1.0), 2)
+        
+        df_p['cum_pnl'] = df_p['pnl_usd'].cumsum()
+        df_p['equity'] = st.session_state.initial_balance + df_p['cum_pnl']
+        df_p['peak'] = df_p['equity'].cummax()
+        df_p['drawdown'] = (df_p['equity'] - df_p['peak']) / df_p['peak'] * 100
+        max_dd = round(df_p['drawdown'].min(), 2)
 
+        m1, m2, m3, m4 = st.columns(4)
+        m1.metric("Profit Factor", f"{profit_factor}")
+        m2.metric("Max Drawdown", f"{max_dd}%")
+        m3.metric("רווח גולמי", f"${gross_profit:,.2f}")
+        m4.metric("הפסד גולמי", f"${gross_loss:,.2f}")
+
+        st.markdown("#### 📈 עקומת צמיחת החשבון (Equity Curve)")
+        fig_eq = go.Figure()
+        fig_eq.add_trace(go.Scatter(x=df_p['timestamp'], y=df_p['equity'], mode='lines+markers', line=dict(color='#00E676', width=3), fill='tozeroy', fillcolor='rgba(0,230,118,0.1)'))
+        fig_eq.update_layout(template="plotly_dark", paper_bgcolor='rgba(0,0,0,0)', height=320)
+        st.plotly_chart(fig_eq, use_container_width=True)
+
+        st.markdown("#### 📑 פירוט עסקאות מתוך בסיס הנתונים")
+        st.dataframe(df_p[['id', 'timestamp', 'symbol', 'direction', 'entry', 'risk_usd', 'pnl_usd']], use_container_width=True)
+
+# =========================================================================
+# OTHER PAGES
+# =========================================================================
 elif current_page == 'signal_details':
     if st.button("🔙 חזרה לטרמינל"): navigate_to('main')
-    st.markdown("### 🔬 פירוט FVG ו-Order Blocks")
-    st.write("Order Blocks פעילים:", res['obs'])
-    st.write("Fair Value Gaps שנמצאו:", res['fvgs'])
+    st.markdown("### 🔬 פירוט Order Flow וניתוח שוק")
+    col_a, col_b = st.columns(2)
+    with col_a:
+        st.write("Order Blocks פעילים:", res['obs'])
+        st.write("Fair Value Gaps שנמצאו:", res['fvgs'])
+    with col_b:
+        st.write("מגמת CVD:", res['cvd_trend'])
+        st.write("קונפלואנסים שנמצאו:", res['confluences'])
 
 elif current_page == 'journal':
     if st.button("🔙 חזרה לטרמינל"): navigate_to('main')
-    st.markdown("### 📖 יומן עסקאות קבוע")
+    st.markdown("### 📖 יומן עסקאות קבוע (SQLite)")
     trades = st.session_state.trade_journal
     for t in trades:
         if t['status'] == 'ACTIVE':
@@ -431,3 +485,5 @@ elif current_page == 'journal':
 elif current_page == 'risk_details':
     if st.button("🔙 חזרה לטרמינל"): navigate_to('main')
     st.markdown("### 🧮 סימולטור ניהול סיכונים")
+    st.write(f"יתרת חשבון נוכחית: ${st.session_state.account_balance:,.2f}")
+    st.write(f"סיכון מומלץ לעסקה (1%): ${st.session_state.account_balance * 0.01:,.2f}")
