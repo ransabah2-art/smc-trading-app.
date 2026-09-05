@@ -81,27 +81,48 @@ def navigate_to(page_name):
     st.session_state.current_page = page_name
     st.rerun()
 
-# 4. Mobile-Responsive Custom CSS
+# 4. Mobile-Responsive & RTL Fixed CSS
 st.markdown("""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700;800&family=Plus+Jakarta+Sans:wght@300;400;600;700;800&display=swap');
     
-    html, body, [class*="css"] { font-family: 'Plus Jakarta Sans', sans-serif; }
-    .stApp { background: #06080D; color: #E2E8F0; }
+    html, body, [class*="css"] { 
+        font-family: 'Plus Jakarta Sans', sans-serif;
+    }
+    .stApp { 
+        background: #06080D; 
+        color: #E2E8F0; 
+    }
 
+    /* תיקון עיצוב הכרטיסיות והכותרות */
+    [data-testid="stMetric"] {
+        background: linear-gradient(145deg, rgba(16, 24, 38, 0.9) 0%, rgba(10, 15, 26, 0.95) 100%);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        border-radius: 12px;
+        padding: 14px;
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+        direction: rtl;
+        text-align: right;
+    }
+    
+    [data-testid="stMetricLabel"] {
+        font-size: 0.88rem !important;
+        color: #94A3B8 !important;
+        direction: rtl !important;
+        text-align: right !important;
+        justify-content: flex-start !important;
+    }
+    
     [data-testid="stMetricValue"] {
         font-family: 'JetBrains Mono', monospace !important;
         font-size: 1.25rem !important;
         white-space: nowrap !important;
+        direction: ltr !important;
+        text-align: right !important;
     }
-    
-    .drill-card {
-        background: linear-gradient(145deg, rgba(16, 24, 38, 0.9) 0%, rgba(10, 15, 26, 0.95) 100%);
-        border: 1px solid rgba(255, 255, 255, 0.08);
-        border-radius: 12px;
-        padding: 16px;
-        margin-bottom: 12px;
-        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+
+    [data-testid="stMetricDelta"] {
+        direction: ltr !important;
     }
 
     .top-status-bar {
@@ -115,6 +136,7 @@ st.markdown("""
         align-items: center;
         flex-wrap: wrap;
         gap: 10px;
+        direction: ltr;
     }
 
     .status-dot {
@@ -131,11 +153,11 @@ st.markdown("""
         padding: 12px; margin-top: 8px;
         font-family: 'JetBrains Mono', monospace;
         font-size: 0.82rem;
+        direction: rtl;
     }
 
     @media (max-width: 768px) {
         .top-status-bar { flex-direction: column; align-items: flex-start; gap: 6px; }
-        .drill-card { padding: 12px !important; }
     }
 </style>
 """, unsafe_allow_html=True)
@@ -170,7 +192,7 @@ def fetch_klines(symbol="ETHUSDT", interval="1h", limit=120):
 
     # Fallback
     dates = pd.date_range(end=pd.Timestamp.now(), periods=limit, freq=interval.replace('m', 'min'))
-    base_price = 2474.0 if "ETH" in symbol else (95000.0 if "BTC" in symbol else 135.0)
+    base_price = 2474.0 if "ETH" in symbol else (79000.0 if "BTC" in symbol else 103.0)
     returns = np.random.normal(0.0001, 0.003, size=limit)
     price_path = base_price * np.exp(np.cumsum(returns))
     df = pd.DataFrame({'timestamp': dates, 'open': price_path * 1.001, 'high': price_path * 1.002, 'low': price_path * 0.998, 'close': price_path, 'volume': np.random.uniform(500, 3000, limit)})
@@ -210,9 +232,9 @@ def analyze_smc_advanced(df, df_4h=None):
     # Detect FVG (Fair Value Gaps)
     fvgs = []
     for i in range(2, len(df)-1):
-        if df['low'].iloc[i] > df['high'].iloc[i-2]:  # Bullish FVG
+        if df['low'].iloc[i] > df['high'].iloc[i-2]: 
             fvgs.append({'type': 'BULLISH', 'top': df['low'].iloc[i], 'bottom': df['high'].iloc[i-2], 'time': df['timestamp'].iloc[i]})
-        elif df['high'].iloc[i] < df['low'].iloc[i-2]: # Bearish FVG
+        elif df['high'].iloc[i] < df['low'].iloc[i-2]:
             fvgs.append({'type': 'BEARISH', 'top': df['low'].iloc[i-2], 'bottom': df['high'].iloc[i], 'time': df['timestamp'].iloc[i]})
 
     # Detect Order Blocks
@@ -272,7 +294,7 @@ st.markdown(f"""
 current_page = st.session_state.current_page
 
 # =========================================================================
-# PAGE 1: MAIN EXECUTIVE DASHBOARD + SCREENER
+# PAGE 1: MAIN EXECUTIVE DASHBOARD
 # =========================================================================
 if current_page == 'main':
     closed_trades = [t for t in st.session_state.trade_journal if t['status'] == 'CLOSED']
@@ -282,28 +304,22 @@ if current_page == 'main':
 
     c1, c2, c3, c4 = st.columns(4)
     with c1:
-        st.markdown("<div class='drill-card'>", unsafe_allow_html=True)
-        st.metric("שווי תיק ו-PnL", f"${st.session_state.account_balance:,.2f}", f"{total_pnl:+,.2f}$")
+        st.metric("שווי תיק (PnL)", f"${st.session_state.account_balance:,.2f}", f"{total_pnl:+,.2f}$")
         if st.button("ביצועים ➔", key="btn_perf", use_container_width=True): navigate_to('performance')
-        st.markdown("</div>", unsafe_allow_html=True)
 
     with c2:
-        st.markdown("<div class='drill-card'>", unsafe_allow_html=True)
         st.metric("אחוז הצלחה", f"{win_rate:.0f}%", f"{wins}/{len(closed_trades)} עסקאות")
         if st.button("יומן מלא ➔", key="btn_journal", use_container_width=True): navigate_to('journal')
-        st.markdown("</div>", unsafe_allow_html=True)
 
     with c3:
-        st.markdown("<div class='drill-card'>", unsafe_allow_html=True)
         st.metric("איתות SMC", res['direction'], f"ציון: {res['score']}/100")
         if st.button("Order Flow ➔", key="btn_sig", use_container_width=True): navigate_to('signal_details')
-        st.markdown("</div>", unsafe_allow_html=True)
 
     with c4:
-        st.markdown("<div class='drill-card'>", unsafe_allow_html=True)
         st.metric("מחשבון סיכון", "1.0% Risk", f"HTF: {res['htf_bias']}")
         if st.button("סימולטור ➔", key="btn_risk", use_container_width=True): navigate_to('risk_details')
-        st.markdown("</div>", unsafe_allow_html=True)
+
+    st.markdown("<br>", unsafe_allow_html=True)
 
     # Market Screener Section
     with st.expander("🔍 סורק שוק אוטומטי (SMC Multi-Asset Screener)", expanded=False):
@@ -331,11 +347,9 @@ if current_page == 'main':
             increasing_line_color='#00E676', decreasing_line_color='#FF1744'
         ), row=1, col=1)
 
-        # Plot Order Blocks (OB)
         for ob in res['obs']:
             fig.add_hrect(y0=ob['low'], y1=ob['high'], fillcolor="rgba(0, 229, 255, 0.15)", line_width=1, line_color="#00E5FF", row=1, col=1)
 
-        # Plot FVGs
         for fvg in res['fvgs']:
             color = "rgba(0, 230, 118, 0.2)" if fvg['type'] == 'BULLISH' else "rgba(255, 23, 68, 0.2)"
             fig.add_hrect(y0=fvg['bottom'], y1=fvg['top'], fillcolor=color, line_width=0, row=1, col=1)
@@ -353,8 +367,7 @@ if current_page == 'main':
         st.plotly_chart(fig, use_container_width=True)
 
     with col_quick_trade:
-        st.markdown("<div class='drill-card'>", unsafe_allow_html=True)
-        st.markdown("#### 🎯 פרטי עסקה ורמות יעד")
+        st.markdown("<h4 style='text-align: right; direction: rtl;'>🎯 פרטי עסקה ורמות יעד</h4>", unsafe_allow_html=True)
         risk_usd = st.session_state.account_balance * 0.01
 
         st.markdown(f"""
@@ -384,7 +397,6 @@ if current_page == 'main':
                 st.rerun()
         else:
             st.button("ממתין לאישור איתות SMC...", disabled=True, use_container_width=True)
-        st.markdown("</div>", unsafe_allow_html=True)
 
 # =========================================================================
 # OTHER PAGES
@@ -392,7 +404,6 @@ if current_page == 'main':
 elif current_page == 'performance':
     if st.button("🔙 חזרה לטרמינל"): navigate_to('main')
     st.markdown("### 📊 אנליטיקת ביצועים (מתוך SQLite DB)")
-    closed_trades = [t for t in st.session_state.trade_journal if t['status'] == 'CLOSED']
     st.dataframe(pd.DataFrame(st.session_state.trade_journal), use_container_width=True)
 
 elif current_page == 'signal_details':
