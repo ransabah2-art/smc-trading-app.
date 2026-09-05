@@ -8,7 +8,7 @@ from datetime import datetime
 
 # 1. Page Configuration
 st.set_page_config(
-    page_title="Institutional SMC & Order Flow Terminal",
+    page_title="Institutional SMC Terminal",
     page_icon="⚡",
     layout="wide",
     initial_sidebar_state="collapsed"
@@ -29,7 +29,7 @@ def navigate_to(page_name):
     st.session_state.current_page = page_name
     st.rerun()
 
-# 3. Custom CSS
+# 3. Mobile-Responsive Custom CSS
 st.markdown("""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700;800&family=Plus+Jakarta+Sans:wght@300;400;600;700;800&display=swap');
@@ -45,36 +45,51 @@ st.markdown("""
 
     [data-testid="stMetricValue"] {
         font-family: 'JetBrains Mono', monospace !important;
-        font-size: 1.35rem !important;
+        font-size: 1.25rem !important;
         white-space: nowrap !important;
-        text-overflow: clip !important;
-        overflow: visible !important;
+        text-overflow: ellipsis !important;
+        overflow: hidden !important;
     }
     
     [data-testid="stMetricLabel"] {
-        font-size: 0.82rem !important;
+        font-size: 0.8rem !important;
         color: #8A99AD !important;
     }
 
     .drill-card {
         background: linear-gradient(145deg, rgba(16, 24, 38, 0.9) 0%, rgba(10, 15, 26, 0.95) 100%);
         border: 1px solid rgba(255, 255, 255, 0.08);
-        border-radius: 14px;
-        padding: 20px;
-        margin-bottom: 15px;
-        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
-        transition: all 0.3s ease;
+        border-radius: 12px;
+        padding: 16px;
+        margin-bottom: 12px;
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
     }
 
     .top-status-bar {
         background: rgba(14, 20, 32, 0.95);
         border: 1px solid rgba(255, 255, 255, 0.08);
         border-radius: 10px;
-        padding: 10px 20px;
-        margin-bottom: 20px;
+        padding: 10px 16px;
+        margin-bottom: 15px;
         display: flex;
         justify-content: space-between;
         align-items: center;
+        flex-wrap: wrap;
+        gap: 10px;
+    }
+
+    .top-status-left {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+
+    .top-status-right {
+        display: flex;
+        align-items: center;
+        gap: 15px;
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 0.85rem;
     }
 
     .status-dot {
@@ -83,40 +98,63 @@ st.markdown("""
         background-color: #00E676;
         border-radius: 50%;
         display: inline-block;
-        box-shadow: 0 0 10px #00E676;
-        margin-right: 8px;
+        box-shadow: 0 0 8px #00E676;
     }
 
     .badge-oi {
         background: rgba(0, 229, 255, 0.12);
         color: #00E5FF;
         border: 1px solid rgba(0, 229, 255, 0.3);
-        padding: 3px 8px;
-        border-radius: 6px;
-        font-family: 'JetBrains Mono', monospace;
-        font-size: 0.8rem;
+        padding: 2px 6px;
+        border-radius: 4px;
     }
 
     .trade-level-box {
         background: rgba(255, 255, 255, 0.03);
         border: 1px solid rgba(255, 255, 255, 0.06);
-        border-radius: 10px;
-        padding: 14px;
-        margin-top: 10px;
+        border-radius: 8px;
+        padding: 12px;
+        margin-top: 8px;
         font-family: 'JetBrains Mono', monospace;
-        font-size: 0.88rem;
+        font-size: 0.82rem;
+    }
+
+    /* Mobile Responsive Tweaks */
+    @media (max-width: 768px) {
+        .top-status-bar {
+            flex-direction: column;
+            align-items: flex-start;
+            gap: 6px;
+            padding: 8px 12px;
+        }
+        .top-status-right {
+            width: 100%;
+            justify-content: space-between;
+            font-size: 0.78rem;
+        }
+        .drill-card {
+            padding: 12px !important;
+            margin-bottom: 8px !important;
+        }
+        [data-testid="stMetricValue"] {
+            font-size: 1.05rem !important;
+        }
+        .stButton button {
+            padding: 10px 14px !important;
+            font-size: 0.9rem !important;
+        }
     }
 </style>
 """, unsafe_allow_html=True)
 
 # 4. Multi-Exchange Real-Time Data Engine
 @st.cache_data(ttl=10)
-def fetch_klines(symbol="BTCUSDT", interval="1h", limit=120):
+def fetch_klines(symbol="ETHUSDT", interval="1h", limit=120):
     headers = {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36'
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
     }
 
-    # Attempt 1: MEXC Spot API
+    # MEXC
     try:
         tf_mexc = {"15m": "15m", "1h": "60m", "4h": "4h"}.get(interval, "60m")
         url = f"https://api.mexc.com/api/v3/klines?symbol={symbol}&interval={tf_mexc}&limit={limit}"
@@ -132,7 +170,7 @@ def fetch_klines(symbol="BTCUSDT", interval="1h", limit=120):
     except Exception:
         pass
 
-    # Attempt 2: Binance Vision Official Mirror API
+    # Binance Vision Mirror
     try:
         url = f"https://data-api.binance.vision/api/v3/klines?symbol={symbol}&interval={interval}&limit={limit}"
         res = requests.get(url, headers=headers, timeout=4)
@@ -147,7 +185,7 @@ def fetch_klines(symbol="BTCUSDT", interval="1h", limit=120):
     except Exception:
         pass
 
-    # Attempt 3: Gate.io API
+    # Gate.io
     try:
         tf_gate = {"15m": "15m", "1h": "1h", "4h": "4h"}.get(interval, "1h")
         sym_gate = symbol.replace("USDT", "_USDT")
@@ -165,28 +203,9 @@ def fetch_klines(symbol="BTCUSDT", interval="1h", limit=120):
     except Exception:
         pass
 
-    # Attempt 4: OKX Public API
-    try:
-        tf_okx = {"15m": "15m", "1h": "1H", "4h": "4H"}.get(interval, "1H")
-        sym_okx = symbol.replace("USDT", "-USDT")
-        url = f"https://www.okx.com/api/v5/market/candles?instId={sym_okx}&bar={tf_okx}&limit={limit}"
-        res = requests.get(url, headers=headers, timeout=4)
-        if res.status_code == 200:
-            data = res.json()
-            if data.get('code') == '0' and data.get('data'):
-                raw = data['data']
-                df = pd.DataFrame(raw, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume', 'volCcy', 'volCcyQuote', 'confirm'])
-                for col in ['open', 'high', 'low', 'close', 'volume']:
-                    df[col] = df[col].astype(float)
-                df['timestamp'] = pd.to_datetime(df['timestamp'].astype(float), unit='ms')
-                df = df.sort_values('timestamp').reset_index(drop=True)
-                return df, "OKX_LIVE"
-    except Exception:
-        pass
-
     # Emergency Fallback
     dates = pd.date_range(end=pd.Timestamp.now(), periods=limit, freq=interval.replace('m', 'min'))
-    base_price = 95000.0 if "BTC" in symbol else (2474.0 if "ETH" in symbol else 135.0)
+    base_price = 2474.0 if "ETH" in symbol else (95000.0 if "BTC" in symbol else 135.0)
     returns = np.random.normal(0.0001, 0.003, size=limit)
     price_path = base_price * np.exp(np.cumsum(returns))
     
@@ -201,7 +220,7 @@ def fetch_klines(symbol="BTCUSDT", interval="1h", limit=120):
     return df, "FALLBACK_STATIC"
 
 @st.cache_data(ttl=15)
-def fetch_open_interest(symbol="BTCUSDT"):
+def fetch_open_interest(symbol="ETHUSDT"):
     headers = {'User-Agent': 'Mozilla/5.0'}
     try:
         url = f"https://api.bybit.com/v5/market/open-interest?category=linear&symbol={symbol}&intervalTime=5min&limit=1"
@@ -271,7 +290,7 @@ def analyze_smc_advanced(df, df_4h=None):
 
 # 5. Sidebar Controls
 st.sidebar.title("⚡ הגדרות מסחר")
-symbol = st.sidebar.selectbox("נכס", ["BTCUSDT", "ETHUSDT", "SOLUSDT", "BNBUSDT"], index=1)
+symbol = st.sidebar.selectbox("נכס", ["ETHUSDT", "BTCUSDT", "SOLUSDT", "BNBUSDT"], index=0)
 timeframe = st.sidebar.selectbox("טווח זמן (Entry)", ["15m", "1h", "4h"], index=1)
 
 if st.sidebar.button("🔄 רענן נתונים בלייב"):
@@ -282,17 +301,17 @@ df, data_source = fetch_klines(symbol, timeframe)
 df_4h, _ = fetch_klines(symbol, "4h")
 oi_val = fetch_open_interest(symbol)
 
-# 6. Top Bar Status
+# 6. Top Bar Status (Mobile Friendly)
 status_color = "#00E676" if "LIVE" in data_source else "#FFD600"
 st.markdown(f"""
 <div class="top-status-bar">
-    <div style="display:flex; align-items:center;">
-        <span class="status-dot" style="background-color:{status_color}; box-shadow: 0 0 10px {status_color};"></span>
-        <strong style="color: #00E676; font-family: 'JetBrains Mono';">INSTITUTIONAL TERMINAL</strong>
-        <span style="margin-left: 12px; font-size: 0.8rem; color: #00E5FF; font-weight: bold;">[מקור חי: {data_source}]</span>
+    <div class="top-status-left">
+        <span class="status-dot" style="background-color:{status_color};"></span>
+        <strong style="color: #00E676; font-family: 'JetBrains Mono'; font-size: 0.9rem;">INSTITUTIONAL TERMINAL</strong>
+        <span style="color: #00E5FF; font-weight: bold; font-size: 0.75rem;">[{data_source}]</span>
     </div>
-    <div style="font-family: 'JetBrains Mono'; font-size: 0.85rem; display:flex; gap:15px;">
-        <span>Open Interest: <strong class="badge-oi">{oi_val:,.0f}</strong></span>
+    <div class="top-status-right">
+        <span>OI: <strong class="badge-oi">{oi_val:,.0f}</strong></span>
         <span>Equity: <strong style="color:#00E5FF;">${st.session_state.account_balance:,.2f}</strong></span>
     </div>
 </div>
@@ -315,34 +334,32 @@ if current_page == 'main':
     with c1:
         st.markdown("<div class='drill-card'>", unsafe_allow_html=True)
         st.metric("שווי תיק ו-PnL", f"${st.session_state.account_balance:,.2f}", f"{total_pnl:+,.2f}$")
-        if st.button("אנליטיקת ביצועים ➔", key="btn_perf", use_container_width=True):
+        if st.button("ביצועים ➔", key="btn_perf", use_container_width=True):
             navigate_to('performance')
         st.markdown("</div>", unsafe_allow_html=True)
 
     with c2:
         st.markdown("<div class='drill-card'>", unsafe_allow_html=True)
-        st.metric("אחוז הצלחה (Win Rate)", f"{win_rate:.0f}%", f"{wins}/{len(closed_trades)} עסקאות")
-        if st.button("יומן עסקאות מלא ➔", key="btn_journal", use_container_width=True):
+        st.metric("אחוז הצלחה", f"{win_rate:.0f}%", f"{wins}/{len(closed_trades)} עסקאות")
+        if st.button("יומן מלא ➔", key="btn_journal", use_container_width=True):
             navigate_to('journal')
         st.markdown("</div>", unsafe_allow_html=True)
 
     with c3:
         st.markdown("<div class='drill-card'>", unsafe_allow_html=True)
-        st.metric("איתות SMC & Order Flow", res['direction'], f"ציון: {res['score']}/100")
-        if st.button("פירוט Order Flow & OI ➔", key="btn_sig", use_container_width=True):
+        st.metric("איתות SMC", res['direction'], f"ציון: {res['score']}/100")
+        if st.button("Order Flow ➔", key="btn_sig", use_container_width=True):
             navigate_to('signal_details')
         st.markdown("</div>", unsafe_allow_html=True)
 
     with c4:
         st.markdown("<div class='drill-card'>", unsafe_allow_html=True)
-        st.metric("מחשבון סיכונים", "1.0% Risk", f"HTF Trend: {res['htf_bias']}")
-        if st.button("סימולטור סיכונים ➔", key="btn_risk", use_container_width=True):
+        st.metric("מחשבון סיכון", "1.0% Risk", f"HTF: {res['htf_bias']}")
+        if st.button("סימולטור ➔", key="btn_risk", use_container_width=True):
             navigate_to('risk_details')
         st.markdown("</div>", unsafe_allow_html=True)
 
-    st.markdown("<br>", unsafe_allow_html=True)
-
-    col_chart, col_quick_trade = st.columns([2.8, 1.2])
+    col_chart, col_quick_trade = st.columns([2.5, 1.5])
 
     with col_chart:
         fig = make_subplots(rows=2, cols=1, shared_xaxes=True, vertical_spacing=0.03, row_heights=[0.8, 0.2])
@@ -359,9 +376,15 @@ if current_page == 'main':
         fig.add_hline(y=res['entry'], line_dash="dash", line_color="#00E5FF", annotation_text="Entry", row=1, col=1)
         fig.add_hline(y=res['sl'], line_dash="solid", line_color="#FF1744", annotation_text="SL", row=1, col=1)
         fig.add_hline(y=res['tp1'], line_dash="dot", line_color="#00E676", annotation_text="TP1", row=1, col=1)
-        fig.add_hline(y=res['tp2'], line_dash="dot", line_color="#00E676", annotation_text="TP2", row=1, col=1)
 
-        fig.update_layout(template="plotly_dark", paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', height=520, showlegend=False, margin=dict(l=10, r=10, t=10, b=10))
+        fig.update_layout(
+            template="plotly_dark",
+            paper_bgcolor='rgba(0,0,0,0)',
+            plot_bgcolor='rgba(0,0,0,0)',
+            height=420,
+            showlegend=False,
+            margin=dict(l=5, r=5, t=5, b=5)
+        )
         st.plotly_chart(fig, use_container_width=True)
 
     with col_quick_trade:
@@ -371,32 +394,32 @@ if current_page == 'main':
 
         st.markdown(f"""
         <div class="trade-level-box">
-            <div style="display:flex; justify-content:space-between; margin-bottom: 8px;">
-                <span style="color:#8A99AD;">נכס נבחר:</span>
+            <div style="display:flex; justify-content:space-between; margin-bottom: 6px;">
+                <span style="color:#8A99AD;">נכס:</span>
                 <strong>{symbol}</strong>
             </div>
-            <div style="display:flex; justify-content:space-between; margin-bottom: 8px;">
-                <span style="color:#8A99AD;">מחיר בלייב (Entry):</span>
+            <div style="display:flex; justify-content:space-between; margin-bottom: 6px;">
+                <span style="color:#8A99AD;">מחיר בלייב:</span>
                 <strong style="color:#00E5FF;">${res['entry']:,.2f}</strong>
             </div>
-            <div style="display:flex; justify-content:space-between; margin-bottom: 8px;">
+            <div style="display:flex; justify-content:space-between; margin-bottom: 6px;">
                 <span style="color:#8A99AD;">סטופ לוס (SL):</span>
                 <strong style="color:#FF1744;">${res['sl']:,.2f}</strong>
             </div>
-            <hr style="border-color: rgba(255,255,255,0.08); margin: 8px 0;">
-            <div style="display:flex; justify-content:space-between; margin-bottom: 6px;">
+            <hr style="border-color: rgba(255,255,255,0.08); margin: 6px 0;">
+            <div style="display:flex; justify-content:space-between; margin-bottom: 4px;">
                 <span style="color:#8A99AD;">יעד 1 (TP1 - 1.5R):</span>
                 <strong style="color:#00E676;">${res['tp1']:,.2f}</strong>
             </div>
-            <div style="display:flex; justify-content:space-between; margin-bottom: 6px;">
+            <div style="display:flex; justify-content:space-between; margin-bottom: 4px;">
                 <span style="color:#8A99AD;">יעד 2 (TP2 - 2.8R):</span>
                 <strong style="color:#00E676;">${res['tp2']:,.2f}</strong>
             </div>
-            <div style="display:flex; justify-content:space-between; margin-bottom: 8px;">
+            <div style="display:flex; justify-content:space-between; margin-bottom: 6px;">
                 <span style="color:#8A99AD;">יעד 3 (TP3 - 4.5R):</span>
                 <strong style="color:#00E676;">${res['tp3']:,.2f}</strong>
             </div>
-            <hr style="border-color: rgba(255,255,255,0.08); margin: 8px 0;">
+            <hr style="border-color: rgba(255,255,255,0.08); margin: 6px 0;">
             <div style="display:flex; justify-content:space-between;">
                 <span style="color:#8A99AD;">יחס R:R:</span>
                 <strong style="color:#00E5FF;">1:{res['rr']}</strong>
@@ -431,10 +454,10 @@ if current_page == 'main':
 # PAGE 2: PERFORMANCE ANALYTICS
 # =========================================================================
 elif current_page == 'performance':
-    if st.button("🔙 חזרה לטרמינל הראשי"):
+    if st.button("🔙 חזרה לטרמינל"):
         navigate_to('main')
         
-    st.markdown("### 📊 עמוד אנליטיקת ביצועים מורחבת")
+    st.markdown("### 📊 אנליטיקת ביצועים")
     st.markdown("<hr>", unsafe_allow_html=True)
 
     p1, p2, p3 = st.columns(3)
@@ -442,7 +465,7 @@ elif current_page == 'performance':
     total_pnl = sum([t['pnl_usd'] for t in closed_trades])
     
     p1.metric("יתרת חשבון", f"${st.session_state.account_balance:,.2f}")
-    p2.metric("רווח/הפסד מצטבר", f"${total_pnl:+,.2f}")
+    p2.metric("רווח/הפסד", f"${total_pnl:+,.2f}")
     p3.metric("Profit Factor", "2.14" if closed_trades else "0.0")
 
     st.markdown("#### עקומת התפתחות התיק (Equity Curve)")
@@ -454,31 +477,31 @@ elif current_page == 'performance':
 
     fig_eq = go.Figure()
     fig_eq.add_trace(go.Scatter(y=equity_data, mode='lines+markers', line=dict(color='#00E5FF', width=3)))
-    fig_eq.update_layout(template="plotly_dark", paper_bgcolor='rgba(0,0,0,0)', height=350)
+    fig_eq.update_layout(template="plotly_dark", paper_bgcolor='rgba(0,0,0,0)', height=320, margin=dict(l=10, r=10, t=10, b=10))
     st.plotly_chart(fig_eq, use_container_width=True)
 
 # =========================================================================
 # PAGE 3: ORDER FLOW & SMC DETAILS
 # =========================================================================
 elif current_page == 'signal_details':
-    if st.button("🔙 חזרה לטרמינל הראשי"):
+    if st.button("🔙 חזרה לטרמינל"):
         navigate_to('main')
 
-    st.markdown("### 🔬 ניתוח מורחב: Order Flow & Multi-Timeframe")
+    st.markdown("### 🔬 ניתוח Order Flow & SMC")
     st.markdown("<hr>", unsafe_allow_html=True)
 
     d1, d2 = st.columns(2)
 
     with d1:
         st.markdown("<div class='drill-card'>", unsafe_allow_html=True)
-        st.markdown("#### 🌊 נתוני Open Interest בלייב")
+        st.markdown("#### 🌊 Open Interest בלייב")
         st.write(f"חוזי פיוצ'רס פעילים ב-{symbol}: **{oi_val:,.0f}**")
-        st.caption("עלייה ב-Open Interest במקביל לפריצת מחיר מאשרת כניסת מוסדיים קונים/מוכרים אגרסיביים.")
+        st.caption("עלייה ב-Open Interest במקביל לפריצת מחיר מאשרת כניסת מוסדיים.")
         st.markdown("</div>", unsafe_allow_html=True)
 
     with d2:
         st.markdown("<div class='drill-card'>", unsafe_allow_html=True)
-        st.markdown("#### 🎯 פירוט רמות יעד מחושבות")
+        st.markdown("#### 🎯 פירוט רמות יעד")
         st.write(f"מחיר כניסה: **${res['entry']:,.2f}**")
         st.write(f"סטופ לוס: **${res['sl']:,.2f}**")
         st.write(f"Take Profit 1: **${res['tp1']:,.2f}**")
@@ -486,7 +509,7 @@ elif current_page == 'signal_details':
         st.write(f"Take Profit 3: **${res['tp3']:,.2f}**")
         st.markdown("</div>", unsafe_allow_html=True)
 
-    st.markdown("#### 📋 רשימת אישורי כניסה (Confluences Check)")
+    st.markdown("#### 📋 אישורי כניסה (Confluences Check)")
     for c in res['confluences']:
         st.success(f"✓ {c}")
 
@@ -494,20 +517,20 @@ elif current_page == 'signal_details':
 # PAGE 4: TRADE JOURNAL
 # =========================================================================
 elif current_page == 'journal':
-    if st.button("🔙 חזרה לטרמינל הראשי"):
+    if st.button("🔙 חזרה לטרמינל"):
         navigate_to('main')
 
-    st.markdown("### 📖 יומן עסקאות מפורט")
+    st.markdown("### 📖 יומן עסקאות")
     st.markdown("<hr>", unsafe_allow_html=True)
 
     active_trades = [t for t in st.session_state.trade_journal if t['status'] == 'ACTIVE']
     closed_trades = [t for t in st.session_state.trade_journal if t['status'] == 'CLOSED']
 
-    st.markdown("#### עסקאות פעילות בלייב")
+    st.markdown("#### עסקאות פעילות")
     if active_trades:
         for trade in active_trades:
             c_a, c_b = st.columns([3, 1])
-            c_a.write(f"**#{trade['id']} {trade['symbol']}** | כניסה: ${trade['entry']:,.2f} | SL: ${trade['sl']:,.2f} | TP2: ${trade['tp2']:,.2f}")
+            c_a.write(f"**#{trade['id']} {trade['symbol']}** | כניסה: ${trade['entry']:,.2f} | SL: ${trade['sl']:,.2f}")
             if c_b.button("סגור ב-TP2 (+2.8R)", key=f"cl_{trade['id']}"):
                 trade['status'] = 'CLOSED'
                 trade['pnl_usd'] = trade['risk_usd'] * 2.8
@@ -527,13 +550,13 @@ elif current_page == 'journal':
 # PAGE 5: RISK SIMULATOR
 # =========================================================================
 elif current_page == 'risk_details':
-    if st.button("🔙 חזרה לטרמינל הראשי"):
+    if st.button("🔙 חזרה לטרמינל"):
         navigate_to('main')
 
-    st.markdown("### 🧮 סימולטור ניהול סיכונים ונקודות הנזלה")
+    st.markdown("### 🧮 סימולטור ניהול סיכונים")
     st.markdown("<hr>", unsafe_allow_html=True)
 
-    sim_risk = st.slider("אחוז סיכון מבוקש (%):", 0.25, 5.0, 1.0, 0.25)
+    sim_risk = st.slider("אחוז סיכון (%):", 0.25, 5.0, 1.0, 0.25)
     sim_lev = st.number_input("מינוף:", 1, 125, 10)
 
     risk_usd = st.session_state.account_balance * (sim_risk / 100.0)
@@ -544,7 +567,7 @@ elif current_page == 'risk_details':
     <div class='drill-card'>
         <h4>תוצאות סימולציה:</h4>
         • סיכון כספי: <strong style="color:#FF1744;">${risk_usd:,.2f}</strong><br>
-        • גודל פוזיציה כולל: <strong style="color:#00E5FF;">${pos_usd:,.2f}</strong><br>
-        • בטחונות נדרשים (Margin): <strong style="color:#00E676;">${margin:,.2f}</strong>
+        • גודל פוזיציה: <strong style="color:#00E5FF;">${pos_usd:,.2f}</strong><br>
+        • בטחונות (Margin): <strong style="color:#00E676;">${margin:,.2f}</strong>
     </div>
     """, unsafe_allow_html=True)
