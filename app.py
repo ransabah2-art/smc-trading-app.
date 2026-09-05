@@ -109,54 +109,84 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# 4. Multi-Broker Real-Time Data Engine
+# 4. Multi-Exchange Real-Time Data Engine
 @st.cache_data(ttl=10)
 def fetch_klines(symbol="BTCUSDT", interval="1h", limit=120):
-    # Mapping intervals for Bybit API
-    tf_map_bybit = {"15m": "15", "1h": "60", "4h": "240", "1d": "D"}
-    bybit_tf = tf_map_bybit.get(interval, "60")
-    
-    headers = {'User-Agent': 'Mozilla/5.0'}
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36'
+    }
 
-    # Primary Source: Bybit Linear Futures API (High Reliability on Cloud)
+    # Attempt 1: MEXC Spot API
     try:
-        url = f"https://api.bybit.com/v5/market/kline?category=linear&symbol={symbol}&interval={bybit_tf}&limit={limit}"
-        res = requests.get(url, headers=headers, timeout=5)
+        tf_mexc = {"15m": "15m", "1h": "60m", "4h": "4h"}.get(interval, "60m")
+        url = f"https://api.mexc.com/api/v3/klines?symbol={symbol}&interval={tf_mexc}&limit={limit}"
+        res = requests.get(url, headers=headers, timeout=4)
         if res.status_code == 200:
             data = res.json()
-            if data.get('retCode') == 0 and data['result']['list']:
-                raw_list = data['result']['list']
-                # Bybit returns: [startTime, openPrice, highPrice, lowPrice, closePrice, volume, turnover]
-                df = pd.DataFrame(raw_list, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume', 'turnover'])
+            if isinstance(data, list) and len(data) > 0:
+                df = pd.DataFrame(data, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume', 'close_time', 'asset_vol', 'trades', 'tb_base', 'tb_quote', 'ignore'])
+                for col in ['open', 'high', 'low', 'close', 'volume']:
+                    df[col] = df[col].astype(float)
+                df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
+                return df, "MEXC_LIVE"
+    except Exception:
+        pass
+
+    # Attempt 2: Binance Vision Official Mirror API
+    try:
+        url = f"https://data-api.binance.vision/api/v3/klines?symbol={symbol}&interval={interval}&limit={limit}"
+        res = requests.get(url, headers=headers, timeout=4)
+        if res.status_code == 200:
+            data = res.json()
+            if isinstance(data, list) and len(data) > 0:
+                df = pd.DataFrame(data, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume', 'close_time', 'qav', 'num_trades', 'tb_base_av', 'tb_quote_av', 'ignore'])
+                for col in ['open', 'high', 'low', 'close', 'volume']:
+                    df[col] = df[col].astype(float)
+                df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
+                return df, "BINANCE_VISION_LIVE"
+    except Exception:
+        pass
+
+    # Attempt 3: Gate.io API
+    try:
+        tf_gate = {"15m": "15m", "1h": "1h", "4h": "4h"}.get(interval, "1h")
+        sym_gate = symbol.replace("USDT", "_USDT")
+        url = f"https://api.gateio.ws/api/v4/spot/candlesticks?currency_pair={sym_gate}&interval={tf_gate}&limit={limit}"
+        res = requests.get(url, headers=headers, timeout=4)
+        if res.status_code == 200:
+            data = res.json()
+            if isinstance(data, list) and len(data) > 0:
+                df = pd.DataFrame(data, columns=['timestamp', 'volume', 'close', 'high', 'low', 'open'])
+                for col in ['open', 'high', 'low', 'close', 'volume']:
+                    df[col] = df[col].astype(float)
+                df['timestamp'] = pd.to_datetime(df['timestamp'].astype(float), unit='s')
+                df = df.sort_values('timestamp').reset_index(drop=True)
+                return df, "GATEIO_LIVE"
+    except Exception:
+        pass
+
+    # Attempt 4: OKX Public API
+    try:
+        tf_okx = {"15m": "15m", "1h": "1H", "4h": "4H"}.get(interval, "1H")
+        sym_okx = symbol.replace("USDT", "-USDT")
+        url = f"https://www.okx.com/api/v5/market/candles?instId={sym_okx}&bar={tf_okx}&limit={limit}"
+        res = requests.get(url, headers=headers, timeout=4)
+        if res.status_code == 200:
+            data = res.json()
+            if data.get('code') == '0' and data.get('data'):
+                raw = data['data']
+                df = pd.DataFrame(raw, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume', 'volCcy', 'volCcyQuote', 'confirm'])
                 for col in ['open', 'high', 'low', 'close', 'volume']:
                     df[col] = df[col].astype(float)
                 df['timestamp'] = pd.to_datetime(df['timestamp'].astype(float), unit='ms')
                 df = df.sort_values('timestamp').reset_index(drop=True)
-                return df, "BYBIT_LIVE"
+                return df, "OKX_LIVE"
     except Exception:
         pass
 
-    # Backup Source: CryptoCompare Public API
-    try:
-        tf_cc = "hour" if "h" in interval else ("minute" if "m" in interval else "day")
-        agg = int(interval.replace('h','').replace('m','')) if interval != '1d' else 1
-        url = f"https://min-api.cryptocompare.com/data/v2/histo{tf_cc}?fsym={symbol.replace('USDT','')}&tsym=USDT&limit={limit}&aggregate={agg}"
-        res = requests.get(url, headers=headers, timeout=5)
-        if res.status_code == 200:
-            data = res.json()
-            raw_data = data['Data']['Data']
-            df = pd.DataFrame(raw_data)
-            df = df.rename(columns={'time': 'timestamp', 'volumeto': 'volume'})
-            df['timestamp'] = pd.to_datetime(df['timestamp'], unit='s')
-            for col in ['open', 'high', 'low', 'close', 'volume']:
-                df[col] = df[col].astype(float)
-            return df, "CRYPTOCOMPARE_LIVE"
-    except Exception:
-        pass
-
-    # Emergency Fallback - Static Simulation
+    # Emergency Fallback
     dates = pd.date_range(end=pd.Timestamp.now(), periods=limit, freq=interval.replace('m', 'min'))
-    base_price = 95000.0 if "BTC" in symbol else (2700.0 if "ETH" in symbol else 180.0)
+    base_price = 95000.0 if "BTC" in symbol else (2474.0 if "ETH" in symbol else 135.0)
     returns = np.random.normal(0.0001, 0.003, size=limit)
     price_path = base_price * np.exp(np.cumsum(returns))
     
@@ -168,14 +198,14 @@ def fetch_klines(symbol="BTCUSDT", interval="1h", limit=120):
         'close': price_path,
         'volume': np.random.uniform(500, 3000, limit)
     })
-    return df, "SIMULATED"
+    return df, "FALLBACK_STATIC"
 
 @st.cache_data(ttl=15)
 def fetch_open_interest(symbol="BTCUSDT"):
     headers = {'User-Agent': 'Mozilla/5.0'}
     try:
         url = f"https://api.bybit.com/v5/market/open-interest?category=linear&symbol={symbol}&intervalTime=5min&limit=1"
-        res = requests.get(url, headers=headers, timeout=4)
+        res = requests.get(url, headers=headers, timeout=3)
         if res.status_code == 200:
             data = res.json()
             if data.get('retCode') == 0 and data['result']['list']:
@@ -241,11 +271,12 @@ def analyze_smc_advanced(df, df_4h=None):
 
 # 5. Sidebar Controls
 st.sidebar.title("⚡ הגדרות מסחר")
-symbol = st.sidebar.selectbox("נכס", ["BTCUSDT", "ETHUSDT", "SOLUSDT", "BNBUSDT"], index=0)
+symbol = st.sidebar.selectbox("נכס", ["BTCUSDT", "ETHUSDT", "SOLUSDT", "BNBUSDT"], index=1)
 timeframe = st.sidebar.selectbox("טווח זמן (Entry)", ["15m", "1h", "4h"], index=1)
 
-if st.sidebar.button("🔄 רענן נתונים"):
+if st.sidebar.button("🔄 רענן נתונים בלייב"):
     st.cache_data.clear()
+    st.rerun()
 
 df, data_source = fetch_klines(symbol, timeframe)
 df_4h, _ = fetch_klines(symbol, "4h")
@@ -258,7 +289,7 @@ st.markdown(f"""
     <div style="display:flex; align-items:center;">
         <span class="status-dot" style="background-color:{status_color}; box-shadow: 0 0 10px {status_color};"></span>
         <strong style="color: #00E676; font-family: 'JetBrains Mono';">INSTITUTIONAL TERMINAL</strong>
-        <span style="margin-left: 12px; font-size: 0.75rem; color: #8A99AD;">(מקור נתונים: {data_source})</span>
+        <span style="margin-left: 12px; font-size: 0.8rem; color: #00E5FF; font-weight: bold;">[מקור חי: {data_source}]</span>
     </div>
     <div style="font-family: 'JetBrains Mono'; font-size: 0.85rem; display:flex; gap:15px;">
         <span>Open Interest: <strong class="badge-oi">{oi_val:,.0f}</strong></span>
@@ -345,7 +376,7 @@ if current_page == 'main':
                 <strong>{symbol}</strong>
             </div>
             <div style="display:flex; justify-content:space-between; margin-bottom: 8px;">
-                <span style="color:#8A99AD;">מחיר לייב (Entry):</span>
+                <span style="color:#8A99AD;">מחיר בלייב (Entry):</span>
                 <strong style="color:#00E5FF;">${res['entry']:,.2f}</strong>
             </div>
             <div style="display:flex; justify-content:space-between; margin-bottom: 8px;">
